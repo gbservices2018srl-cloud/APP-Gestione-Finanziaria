@@ -22,7 +22,8 @@ import datetime
 from flask import Flask, request, jsonify, session, g, send_from_directory
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "data.db")
+DATA_DIR = os.environ.get("DATA_DIR", BASE_DIR)
+DB_PATH = os.path.join(DATA_DIR, "data.db")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 app = Flask(__name__, static_folder=STATIC_DIR)
@@ -30,6 +31,8 @@ app.secret_key = os.environ.get("SECRET_KEY", "cambia-questa-chiave-in-produzion
 app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_HTTPONLY=True,
+    PERMANENT_SESSION_LIFETIME=datetime.timedelta(minutes=10),
+    SESSION_REFRESH_EACH_REQUEST=True,
 )
 
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -51,6 +54,7 @@ def close_db(exception=None):
 
 
 def init_db():
+    os.makedirs(DATA_DIR, exist_ok=True)
     db = sqlite3.connect(DB_PATH)
     db.execute(
         """CREATE TABLE IF NOT EXISTS admin_config (
@@ -115,6 +119,7 @@ def admin_setup():
     )
     db.commit()
     session.clear()
+    session.permanent = True
     session["role"] = "admin"
     return jsonify({"ok": True})
 
@@ -130,6 +135,7 @@ def admin_login():
     if not check_password_hash(row["password_hash"], password):
         return json_error("Password errata.", 401)
     session.clear()
+    session.permanent = True
     session["role"] = "admin"
     return jsonify({"ok": True})
 
@@ -230,6 +236,7 @@ def company_login():
     if row is None or not check_password_hash(row["password_hash"], password):
         return json_error("Nome azienda o password errati.", 401)
     session.clear()
+    session.permanent = True
     session["role"] = "company"
     session["company_id"] = row["id"]
     return jsonify({"ok": True, "name": row["name"]})
