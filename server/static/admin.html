@@ -166,8 +166,11 @@ companies.forEach(function(c,idx){
 var cell = table.querySelector('.actions-'+idx);
 var viewBtn = el('button','small-btn','Vedi dati');
 viewBtn.onclick = async function(){
+viewBtn.textContent = 'Carico...';
 var r = await apiGet('/api/admin/companies/'+c.id+'/data');
+viewBtn.textContent = 'Vedi dati';
 if(r.ok){ viewingData = {name:c.name, json:r.data.data}; render(); }
+else { alert('Non sono riuscito a leggere i dati di questa azienda ('+(r.data&&r.data.error?r.data.error:'errore sconosciuto')+').'); }
 };
 var renameBtnEl = el('button','small-btn','Rinomina');
 renameBtnEl.onclick = async function(){
@@ -197,6 +200,10 @@ if(viewingData){
 var dataCard = el('div','card');
 dataCard.appendChild(el('h2','Dati di: '+viewingData.name));
 var d = viewingData.json || {};
+var isEmpty = Object.keys(d).length===0;
+if(isEmpty){
+dataCard.appendChild(el('div','notice','Questa azienda non ha ancora effettuato il primo accesso dall\'app: non ci sono ancora dati salvati. Appena il cliente entrer\u00e0 con nome azienda e password, l\u2019app creer\u00e0 da sola la struttura di partenza (sedi, voci, listino) e da qui potrai vederla.'));
+}
 var kpis = el('div',null,'');
 function kpi(label,val){ kpis.appendChild(el('span','kpi-mini', label+': <b>'+val+'</b>')); }
 kpi('Sedi', (d.sites||[]).length);
