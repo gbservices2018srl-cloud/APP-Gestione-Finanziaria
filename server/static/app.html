@@ -245,6 +245,7 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 
 <script>
 
+
 var MONTHS = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 var MONTHS_SHORT = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 var FIXED_ITEMS_SEED = JSON.parse(document.getElementById('fixedItemsData').textContent);
@@ -998,9 +999,9 @@ return {rows:rows,cumFatt:cumFatt,cumFissi:cumFissi,cumVar:cumVar,cumRis:cumRis}
 }
 var PAGES = [
 {id:'dashboard', label:'Riepilogo', icon:'&#9679;'},
-{id:'budget', label:'Budget costi', icon:'&#128188;'},
 {id:'consuntivo', label:'Consuntivo mensile', icon:'&#128197;'},
 {id:'scostamenti', label:'Scostamenti', icon:'&#128200;'},
+{id:'budget', label:'Budget costi', icon:'&#128188;'},
 {id:'incassi', label:'Previsionale incassi', icon:'&#128176;'},
 {id:'listino', label:'Listino & margini', icon:'&#129513;'},
 {id:'contoeconomico', label:'Conto economico', icon:'&#128203;'},
@@ -2564,6 +2565,7 @@ main.appendChild(card);
 };
 startInactivityWatcher();
 bootApp();
+
 
 </script>
 </body>
