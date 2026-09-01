@@ -227,6 +227,7 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
   .chart-wrap{break-inside:avoid;}
   h1.pagetitle{margin-top:0 !important;}
 }
+.section-title{font-family:var(--font-brand); font-weight:800; font-size:16px; color:var(--navy); text-transform:uppercase; letter-spacing:.04em; margin:24px 0 4px;}
 </style>
 </head>
 <body>
@@ -1362,6 +1363,16 @@ main.appendChild(two);
 var c3 = el('div','card'); c3.appendChild(el('h2','Budget annuo per sede (costi fissi)'));
 var chart3 = el('div','chart-wrap'); var cv3=document.createElement('canvas'); chart3.appendChild(cv3); c3.appendChild(chart3);
 main.appendChild(c3);
+main.appendChild(el('div','section-title','Fatturato'));
+var c4 = el('div','card'); c4.appendChild(el('h2','Andamento fatturato per sede'));
+c4.appendChild(el('div','help-tip','Clicca sui nomi nella legenda per nascondere/mostrare la linea di una sede.'));
+var chart4 = el('div','chart-wrap'); chart4.style.height='380px'; var cv4=document.createElement('canvas'); chart4.appendChild(cv4); c4.appendChild(chart4);
+main.appendChild(c4);
+main.appendChild(el('div','section-title','Produzione'));
+var c5 = el('div','card'); c5.appendChild(el('h2','Andamento produzione per sede'));
+c5.appendChild(el('div','help-tip','Clicca sui nomi nella legenda per nascondere/mostrare la linea di una sede.'));
+var chart5 = el('div','chart-wrap'); chart5.style.height='380px'; var cv5=document.createElement('canvas'); chart5.appendChild(cv5); c5.appendChild(chart5);
+main.appendChild(c5);
 setTimeout(function(){
 new Chart(cv1,{type:'bar',data:{labels:MONTHS_SHORT,datasets:[
 {label:'Fatturato', data:ce.rows.map(function(r){return r.fatt;}), backgroundColor:'#2F8F9E'},
@@ -1372,6 +1383,15 @@ new Chart(cv2,{type:'doughnut',data:{labels:['Costi fissi','Costi variabili'],da
 options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
 new Chart(cv3,{type:'bar',data:{labels:budget.perSite.map(function(p){return p.siteName;}),datasets:[{label:'Budget annuo costi fissi',data:budget.perSite.map(function(p){return p.totFixedMese*12;}),backgroundColor:'#A36EA6'}]},
 options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},indexAxis:'y'}});
+var siteColors4 = ['#2F8F9E','#3B2647','#A36EA6','#c0483f','#3f8f5c','#F1E44D','#5A3D68','#e07b39','#4a90d9','#9b59b6'];
+var dsRev = [], dsProd = [];
+STATE.sites.forEach(function(s,idx){
+var color = siteColors4[idx % siteColors4.length];
+dsRev.push({label:s.name, data:MONTHS.map(function(_,m){return consRevenueMonthSite(s.id,m);}), borderColor:color, backgroundColor:color, fill:false, tension:.25});
+dsProd.push({label:s.name, data:MONTHS.map(function(_,m){return consProduzioneMonthSite(s.id,m);}), borderColor:color, backgroundColor:color, fill:false, tension:.25});
+});
+new Chart(cv4,{type:'line',data:{labels:MONTHS_SHORT,datasets:dsRev},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+new Chart(cv5,{type:'line',data:{labels:MONTHS_SHORT,datasets:dsProd},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
 },0);
 if(mc===0){
 var note = el('div','notebox','&#9888;&#65039; Non hai ancora inserito dati nel Consuntivo Mensile: gli scostamenti e le proiezioni sono a zero finch\u00e9 non compili almeno un mese.');
