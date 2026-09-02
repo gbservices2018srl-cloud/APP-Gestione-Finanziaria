@@ -252,6 +252,7 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 <script>
 
 
+
 var MONTHS = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 var MONTHS_SHORT = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 var FIXED_ITEMS_SEED = JSON.parse(document.getElementById('fixedItemsData').textContent);
@@ -288,7 +289,8 @@ bankAccounts: [],
 bankBalances: {},
 currentYear: new Date().getFullYear(),
 statsYears: [],
-companyLogo: null
+companyLogo: null,
+ceColumns: []
 };
 var siteIds = [];
 SITES_SEED.forEach(function(name){
@@ -512,6 +514,7 @@ var out = parsed || {};
 ['budget','consuntivo','incassi','bankBalances'].forEach(function(k){ if(typeof out[k] !== 'object' || out[k]===null) out[k]=d[k]; });
 if(!out.currentYear || typeof out.currentYear!=='number') out.currentYear = d.currentYear;
 if(out.companyLogo===undefined) out.companyLogo = null;
+if(!Array.isArray(out.ceColumns)) out.ceColumns = [];
 ['fixed','varPct','ammPct','revenue','guadagnoPct','oneTimeNewUL'].forEach(function(k){ if(!out.budget[k]) out.budget[k]={}; });
 ['revenue','produzione','fixed','varCat','mesiOverride'].forEach(function(k){ if(!out.consuntivo[k]) out.consuntivo[k]={}; });
 ['tmv','conv','splitPVest','splitPVint','splitOVint','splitNC'].forEach(function(f){ if(!out.incassi[f]) out.incassi[f]={}; });
@@ -830,9 +833,10 @@ var pctBepAnnuo = safeDiv(bepAnnuo, revenue*12);
 var dataBepAnnuo = pctBepAnnuo * 365;
 var guadagnoPct = Number(STATE.budget.guadagnoPct[siteId])||0;
 var targetMese = bepMese * (1+guadagnoPct);
+var incFissiBudget = safeDiv(totFixedMese, revenue);
 return { fixedSum:fixedSum, amm:amm, totFixedMese:totFixedMese, revenue:revenue,
 varDetail:varDetail, varSum:varSum, mdc:mdc, mdcPct:mdcPct, bepMese:bepMese,
-giornoBep:giornoBep, bepAnnuo:bepAnnuo, pctBepAnnuo:pctBepAnnuo, dataBepAnnuo:dataBepAnnuo, targetMese:targetMese };
+giornoBep:giornoBep, bepAnnuo:bepAnnuo, pctBepAnnuo:pctBepAnnuo, dataBepAnnuo:dataBepAnnuo, targetMese:targetMese, incFissiBudget:incFissiBudget };
 }
 function calcBudgetAll(){
 var perSite = STATE.sites.map(function(s){ return Object.assign({siteId:s.id, siteName:s.name}, calcBudgetSite(s.id)); });
@@ -844,6 +848,7 @@ tot.revenue+=p.revenue; tot.varSum+=p.varSum; tot.mdc+=p.mdc;
 tot.mdcPct = safeDiv(tot.mdc, tot.revenue);
 tot.bepMese = safeDiv(tot.totFixedMese, tot.mdcPct);
 tot.bepAnnuo = tot.bepMese*12;
+tot.incFissiBudget = safeDiv(tot.totFixedMese, tot.revenue);
 var avgGuadagno = STATE.sites.length ? safeDiv(sum(STATE.sites.map(function(s){return Number(STATE.budget.guadagnoPct[s.id])||0;})), STATE.sites.length) : 0;
 tot.targetMese = tot.bepMese*(1+avgGuadagno);
 return {perSite:perSite, tot:tot};
@@ -1010,17 +1015,31 @@ mdc:mdc,mdcPct:mdcPct,bepPrestazione:bepPrestazione,ebit:ebit,margine:margine,gu
 }
 function calcContoEconomico(){
 var rows=[]; var cumFatt=0,cumFissi=0,cumVar=0,cumRis=0;
+var cumByCol = {};
+STATE.ceColumns.forEach(function(col){ cumByCol[col.id]=0; });
 for(var m=0;m<12;m++){
 var fatt = consRevenueMonthAll(m);
 var fissi = consFixedTotalMonthAll(m);
 var vari = consVarTotalMonthAll(m);
 var risultato = fatt-fissi-vari;
-var acc15 = fatt*0.15;
-var acc7piuRis = fatt*0.07+risultato;
+var colValues = {};
+STATE.ceColumns.forEach(function(col){
+var v = risultato*(Number(col.pct)||0)/100;
+colValues[col.id] = v;
+cumByCol[col.id] += v;
+});
 cumFatt+=fatt; cumFissi+=fissi; cumVar+=vari; cumRis+=risultato;
-rows.push({m:m,fatt:fatt,fissi:fissi,vari:vari,risultato:risultato,acc15:acc15,acc7piuRis:acc7piuRis});
+rows.push({m:m,fatt:fatt,fissi:fissi,vari:vari,risultato:risultato,colValues:colValues});
 }
-return {rows:rows,cumFatt:cumFatt,cumFissi:cumFissi,cumVar:cumVar,cumRis:cumRis};
+return {rows:rows,cumFatt:cumFatt,cumFissi:cumFissi,cumVar:cumVar,cumRis:cumRis,cumByCol:cumByCol};
+}
+function addCEColumn(name, pct){
+STATE.ceColumns.push({id:uid('cecol'), name:name||'Nuova colonna', pct:Number(pct)||0});
+saveState();
+}
+function removeCEColumn(id){
+STATE.ceColumns = STATE.ceColumns.filter(function(c){return c.id!==id;});
+saveState();
 }
 var PAGES = [
 {id:'dashboard', label:'Riepilogo', icon:'&#9679;'},
@@ -1534,6 +1553,7 @@ return k;
 function fixedBreakdownText(c){ return 'voci '+fmtEUR(c.fixedSum)+' + amm.to suppletivi '+fmtEUR(c.amm)+' ('+fmtPct(Number(STATE.budget.ammPct[si])||0)+')'; }
 kpis.appendChild(kpi('Fatturato stimato mensile', fmtEUR(calc.revenue),'', 'kpi-revenue'));
 kpis.appendChild(kpi('Totale costi fissi/mese', fmtEUR(calc.totFixedMese),'','kpi-fixed', fixedBreakdownText(calc), 'kpi-fixed-sub'));
+kpis.appendChild(kpi('Incidenza costi fissi', fmtPct(calc.incFissiBudget),'','kpi-incfissi'));
 kpis.appendChild(kpi('Totale costi variabili/mese', fmtEUR(calc.varSum),'','kpi-var'));
 kpis.appendChild(kpi('MDC (margine)', fmtEUR(calc.mdc), calc.mdc>=0?'pos':'neg','kpi-mdc'));
 kpis.appendChild(kpi('MDC %', fmtPct(calc.mdcPct),'','kpi-mdcpct'));
@@ -1676,6 +1696,7 @@ var kpis = el('div','kpi-grid');
 function kpi(label,value,cls){ var k=el('div','kpi'); k.appendChild(el('div','label',label)); k.appendChild(el('div','value '+(cls||''),value)); return k; }
 kpis.appendChild(kpi('Fatturato stimato mensile', fmtEUR(all.tot.revenue)));
 kpis.appendChild(kpi('Totale costi fissi/mese', fmtEUR(all.tot.totFixedMese)));
+kpis.appendChild(kpi('Incidenza costi fissi', fmtPct(all.tot.incFissiBudget)));
 kpis.appendChild(kpi('Totale costi variabili/mese', fmtEUR(all.tot.varSum)));
 kpis.appendChild(kpi('MDC (margine)', fmtEUR(all.tot.mdc), all.tot.mdc>=0?'pos':'neg'));
 kpis.appendChild(kpi('MDC %', fmtPct(all.tot.mdcPct)));
@@ -2223,6 +2244,7 @@ main.appendChild(card2);
 PAGE: LISTINO & MARGINI  (already dynamic/id-based)
 ============================================================ */
 var listinoFilter = '';
+var listinoSelected = {};
 var listinoImportRows = [];
 var listinoImportStatus = '';
 RENDERERS.listino = function(main){
@@ -2322,38 +2344,83 @@ impBtnRow.appendChild(confirmBtn); impBtnRow.appendChild(cancelImpBtn);
 impCard.appendChild(impBtnRow);
 main.appendChild(impCard);
 }
-var s = scostamentiSummary();
-var costoFissoUnitPct = s.incFissiMedia || 0.25;
-main.appendChild(el('div','notebox','Il "costo fisso" di ogni prestazione viene calcolato come tariffa &times; incidenza media dei costi fissi sul fatturato ('+fmtPct(costoFissoUnitPct)+', dalla pagina Scostamenti). Finch\u00e9 non compili il Consuntivo Mensile, usa una stima del 25%.'));
+var costoFissoUnitPct = calcBudgetAll().tot.incFissiBudget;
+var margini = STATE.listino.map(function(r){ return calcListinoRow(r, costoFissoUnitPct).margine; });
+var margineMedio = margini.length ? sum(margini)/margini.length : 0;
+var listinoKpis = el('div','kpi-grid');
+var mk = el('div','kpi');
+mk.appendChild(el('div','label','Margine medio prestazioni'));
+mk.appendChild(el('div','value '+(margineMedio>=0?'pos':'neg'), fmtPct(margineMedio)));
+mk.appendChild(el('div','sub', 'media su '+STATE.listino.length+' prestazioni a listino'));
+listinoKpis.appendChild(mk);
+main.appendChild(listinoKpis);
 var searchRow = el('div','input-row');
 searchRow.appendChild(el('label',null,'Cerca prestazione'));
-var searchInp = document.createElement('input'); searchInp.type='text'; searchInp.style.width='260px'; searchInp.value = listinoFilter;
-searchInp.addEventListener('input', function(){ listinoFilter = searchInp.value; render(); });
+var searchInp = document.createElement('input'); searchInp.type='text'; searchInp.id='listinoSearchInput'; searchInp.style.width='260px'; searchInp.value = listinoFilter;
+searchInp.addEventListener('input', function(){
+var cursorPos = searchInp.selectionStart;
+listinoFilter = searchInp.value;
+render();
+var freshInp = document.getElementById('listinoSearchInput');
+if(freshInp){ freshInp.focus(); if(freshInp.setSelectionRange) freshInp.setSelectionRange(cursorPos, cursorPos); }
+});
 searchRow.appendChild(searchInp);
 var addBtn = el('button','btn','+ Nuova prestazione'); addBtn.style.marginLeft='12px';
 addBtn.onclick = function(){ STATE.listino.unshift({id:uid('lst'), label:'Nuova prestazione', tariffa:0, tempo:0, materiali:0, lab:0, percProf:0, costoProf:0}); saveState(); render(); };
 searchRow.appendChild(addBtn);
 main.appendChild(searchRow);
+var firstListinoId = STATE.listino.length ? STATE.listino[0].id : null;
+var selRow = el('div','btn-row');
+var selAllLabel = document.createElement('label');
+selAllLabel.style.cssText = 'display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-soft);cursor:pointer;';
+var selAllCb = document.createElement('input'); selAllCb.type='checkbox';
+var selectableIds = STATE.listino.filter(function(r){return r.id!==firstListinoId;}).map(function(r){return r.id;});
+selAllCb.checked = selectableIds.length>0 && selectableIds.every(function(id){return listinoSelected[id];});
+selAllCb.addEventListener('change', function(){
+selectableIds.forEach(function(id){ listinoSelected[id] = selAllCb.checked; });
+render();
+});
+selAllLabel.appendChild(selAllCb);
+selAllLabel.appendChild(document.createTextNode('Seleziona tutte (esclusa la prima voce)'));
+selRow.appendChild(selAllLabel);
+var selectedCount = Object.keys(listinoSelected).filter(function(id){return listinoSelected[id];}).length;
+var delSelBtn = el('button','btn danger', 'Elimina selezionate ('+selectedCount+')');
+delSelBtn.disabled = selectedCount===0;
+delSelBtn.onclick = function(){
+showConfirmModal('Eliminare definitivamente '+selectedCount+' voci di listino selezionate? La prima voce del listino non pu\u00f2 essere eliminata da qui e resta comunque.', function(){
+STATE.listino = STATE.listino.filter(function(r){ return !listinoSelected[r.id]; });
+listinoSelected = {};
+saveState();
+flashStatus('Voci eliminate');
+render();
+});
+};
+selRow.appendChild(delSelBtn);
+main.appendChild(selRow);
 var card = el('div','card');
 var wrap = el('div','table-scroll');
 var table = document.createElement('table'); table.className='datatable';
-var head = '<tr><th>Prestazione</th><th>Tariffa</th><th>Tempo (min)</th><th>Materiali</th><th>Lab.</th><th>% Prof.</th><th>Costo prof. fisso</th><th>Costo fisso</th><th>Costi var. tot.</th><th>Costi totali</th><th>MDC</th><th>MDC%</th><th>BEP prest.</th><th>EBIT</th><th>Margine%</th><th>&euro;/min</th><th></th></tr>';
+var head = '<tr><th></th><th>Prestazione</th><th>Tariffa</th><th>Tempo (min)</th><th>Materiali</th><th>Lab.</th><th>% Prof.</th><th>Costo prof. fisso</th><th>Costo fisso</th><th>Costi var. tot.</th><th>Costi totali</th><th>MDC</th><th>MDC%</th><th>BEP prest.</th><th>EBIT</th><th>Margine%</th><th>&euro;/min</th><th></th></tr>';
 var body = '';
 var filtered = STATE.listino.filter(function(r){ return !listinoFilter || r.label.toLowerCase().indexOf(listinoFilter.toLowerCase())>=0; });
 filtered.forEach(function(row){
 var c = calcListinoRow(row, costoFissoUnitPct);
+var isFirst = row.id===firstListinoId;
 body += '<tr>'+
+'<td>'+(isFirst?'':'<input type="checkbox" data-sel="'+row.id+'" '+(listinoSelected[row.id]?'checked':'')+'/>')+'</td>'+
 '<td><input type="text" data-id="'+row.id+'" data-f="label" value="'+row.label.replace(/"/g,'&quot;')+'" style="width:220px;text-align:left;"/></td>'+
 '<td><span class="money-cell"><input type="number" data-id="'+row.id+'" data-f="tariffa" value="'+row.tariffa+'"/></span></td>'+
 '<td><input type="number" data-id="'+row.id+'" data-f="tempo" value="'+row.tempo+'"/></td>'+
 '<td><span class="money-cell"><input type="number" data-id="'+row.id+'" data-f="materiali" value="'+row.materiali+'"/></span></td>'+
 '<td><span class="money-cell"><input type="number" data-id="'+row.id+'" data-f="lab" value="'+row.lab+'"/></span></td>'+
 '<td><input type="number" step="1" data-id="'+row.id+'" data-f="percProfPct" value="'+(row.percProf*100)+'"/></td>'+
-'<td><span class="money-cell"><input type="number" data-id="'+row.id+'" data-f="costoProf" value="'+row.costoProf+'"/></span></td>'+
+(row.percProf>0
+? '<td><span class="money-cell" title="Calcolato in automatico: (tariffa - lab) &times; % prof.">'+fmtEUR2(c.costoProf)+'</span></td>'
+: '<td><span class="money-cell"><input type="number" data-id="'+row.id+'" data-f="costoProf" value="'+row.costoProf+'"/></span></td>')+
 '<td>'+fmtEUR2(c.costoFisso)+'</td><td>'+fmtEUR2(c.totVar)+'</td><td>'+fmtEUR2(c.costiTotali)+'</td>'+
 '<td>'+fmtEUR2(c.mdc)+'</td><td>'+fmtPct(c.mdcPct)+'</td><td>'+fmtEUR2(c.bepPrestazione)+'</td>'+
 '<td class="'+(c.ebit>=0?'pos':'neg')+'">'+fmtEUR2(c.ebit)+'</td><td>'+fmtPct(c.margine)+'</td><td>'+fmtEUR2(c.guadagnoMinuto)+'</td>'+
-'<td><button class="small-btn" data-del="'+row.id+'">&times;</button></td></tr>';
+'<td><button class="small-btn" data-dup="'+row.id+'" style="margin-right:4px;">DUPLICA</button><button class="small-btn" data-del="'+row.id+'">&times;</button></td></tr>';
 });
 table.innerHTML = '<thead>'+head+'</thead><tbody>'+body+'</tbody>';
 wrap.appendChild(table); card.appendChild(wrap);
@@ -2372,13 +2439,28 @@ inp.addEventListener('input', apply);
 if(inp.dataset.f!=='label'){ inp.addEventListener('change', function(){ render(); }); }
 });
 table.querySelectorAll('button[data-del]').forEach(function(btn){
-btn.addEventListener('click', function(){ STATE.listino = STATE.listino.filter(function(r){return r.id!==btn.dataset.del;}); saveState(); render(); });
+btn.addEventListener('click', function(){ STATE.listino = STATE.listino.filter(function(r){return r.id!==btn.dataset.del;}); delete listinoSelected[btn.dataset.del]; saveState(); render(); });
+});
+table.querySelectorAll('input[data-sel]').forEach(function(cb){
+cb.addEventListener('change', function(){ listinoSelected[cb.dataset.sel] = cb.checked; render(); });
+});
+table.querySelectorAll('button[data-dup]').forEach(function(btn){
+btn.addEventListener('click', function(){
+var srcId = btn.dataset.dup;
+var idx = STATE.listino.findIndex(function(r){return r.id===srcId;});
+if(idx===-1) return;
+var src = STATE.listino[idx];
+var copy = { id: uid('lst'), label: src.label+' (copia)', tariffa: src.tariffa, tempo: src.tempo, materiali: src.materiali, lab: src.lab, percProf: src.percProf, costoProf: src.costoProf };
+STATE.listino.splice(idx+1, 0, copy);
+saveState();
+flashStatus('Voce duplicata');
+render();
+});
 });
 };
 RENDERERS.contoeconomico = function(main){
 main.appendChild(el('h1','pagetitle','Conto economico mensile'));
 main.appendChild(el('p','pagesub','Sintesi aziendale mese per mese, calcolata automaticamente dal Consuntivo Mensile.'));
-main.appendChild(el('div','notebox fix','&#128295; <b>Foglio ricostruito:</b> nel file originale "PF TOTALE" quasi tutte le celle restituivano errore #REF! e provava a mostrare un conto economico per singola sede usando dati che erano solo aziendali. Qui \u00e8 un conto economico aziendale complessivo, coerente.'));
 var ce = calcContoEconomico();
 var kpis = el('div','kpi-grid');
 function kpi(label,value,cls){ var k=el('div','kpi'); k.appendChild(el('div','label',label)); k.appendChild(el('div','value '+(cls||''),value)); return k; }
@@ -2387,15 +2469,49 @@ kpis.appendChild(kpi('Costi fissi totali', fmtEUR(ce.cumFissi)));
 kpis.appendChild(kpi('Costi variabili totali', fmtEUR(ce.cumVar)));
 kpis.appendChild(kpi('Risultato netto', fmtEUR(ce.cumRis), ce.cumRis>=0?'pos':'neg'));
 main.appendChild(kpis);
+var colCard = el('div','card');
+colCard.appendChild(el('h2',null,'Colonne di calcolo personalizzate'));
+colCard.appendChild(el('div','help-tip','Aggiungi quante colonne vuoi (es. Tasse, Accantonamenti, o altro): ognuna calcola una percentuale a tua scelta sul risultato (utile) di ogni mese.'));
+STATE.ceColumns.forEach(function(col){
+var row = el('div','input-row');
+var nameInp = document.createElement('input'); nameInp.type='text'; nameInp.value=col.name; nameInp.style.width='200px';
+nameInp.addEventListener('input', function(){ col.name = nameInp.value; saveState(); });
+nameInp.addEventListener('change', function(){ render(); });
+row.appendChild(nameInp);
+var pctWrap = el('span','money-cell');
+var pctInp = document.createElement('input'); pctInp.type='number'; pctInp.step='0.1'; pctInp.value=col.pct;
+pctInp.addEventListener('input', function(){ col.pct = parseFloat(pctInp.value)||0; saveState(); });
+pctInp.addEventListener('change', function(){ render(); });
+pctWrap.appendChild(pctInp);
+row.appendChild(pctWrap);
+row.appendChild(document.createTextNode(' % del risultato mensile'));
+var rmBtn = el('button','small-btn','Rimuovi'); rmBtn.style.marginLeft='12px'; rmBtn.style.color='var(--red)';
+rmBtn.onclick = function(){ removeCEColumn(col.id); render(); };
+row.appendChild(rmBtn);
+colCard.appendChild(row);
+});
+var addColBtn = el('button','btn secondary','+ Aggiungi colonna');
+addColBtn.onclick = function(){
+showPromptModal('Nome della nuova colonna (es. Tasse, Accantonamenti...)', 'Nuova colonna', function(name){
+addCEColumn(name, 0);
+render();
+});
+};
+colCard.appendChild(addColBtn);
+main.appendChild(colCard);
 var card = el('div','card');
 var wrap = el('div','table-scroll');
 var table = document.createElement('table'); table.className='datatable';
-var head = '<tr><th>Mese</th><th>Fatturato</th><th>Costi fissi</th><th>Costi variabili</th><th>Risultato</th><th>Accant. 15% (tasse)</th><th>Risultato + acc. 7%</th></tr>';
+var head = '<tr><th>Mese</th><th>Fatturato</th><th>Costi fissi</th><th>Costi variabili</th><th>Risultato</th>'+STATE.ceColumns.map(function(col){return '<th>'+col.name.replace(/</g,'&lt;')+' ('+col.pct+'%)</th>';}).join('')+'</tr>';
 var body='';
 ce.rows.forEach(function(r){
-body += '<tr><td>'+MONTHS[r.m]+'</td><td>'+fmtEUR(r.fatt)+'</td><td>'+fmtEUR(r.fissi)+'</td><td>'+fmtEUR(r.vari)+'</td><td class="'+(r.risultato>=0?'pos':'neg')+'">'+fmtEUR(r.risultato)+'</td><td>'+fmtEUR(r.acc15)+'</td><td>'+fmtEUR(r.acc7piuRis)+'</td></tr>';
+body += '<tr><td>'+MONTHS[r.m]+'</td><td>'+fmtEUR(r.fatt)+'</td><td>'+fmtEUR(r.fissi)+'</td><td>'+fmtEUR(r.vari)+'</td><td class="'+(r.risultato>=0?'pos':'neg')+'">'+fmtEUR(r.risultato)+'</td>'+
+STATE.ceColumns.map(function(col){return '<td>'+fmtEUR(r.colValues[col.id]||0)+'</td>';}).join('')+
+'</tr>';
 });
-body += '<tr class="total-row"><td>TOTALE</td><td>'+fmtEUR(ce.cumFatt)+'</td><td>'+fmtEUR(ce.cumFissi)+'</td><td>'+fmtEUR(ce.cumVar)+'</td><td>'+fmtEUR(ce.cumRis)+'</td><td>'+fmtEUR(ce.cumFatt*0.15)+'</td><td>'+fmtEUR(ce.cumFatt*0.07+ce.cumRis)+'</td></tr>';
+body += '<tr class="total-row"><td>TOTALE</td><td>'+fmtEUR(ce.cumFatt)+'</td><td>'+fmtEUR(ce.cumFissi)+'</td><td>'+fmtEUR(ce.cumVar)+'</td><td>'+fmtEUR(ce.cumRis)+'</td>'+
+STATE.ceColumns.map(function(col){return '<td>'+fmtEUR(ce.cumByCol[col.id]||0)+'</td>';}).join('')+
+'</tr>';
 table.innerHTML = '<thead>'+head+'</thead><tbody>'+body+'</tbody>';
 wrap.appendChild(table); card.appendChild(wrap);
 main.appendChild(card);
@@ -2459,7 +2575,7 @@ card1.appendChild(el('div','help-tip','Anno archiviato: qui puoi inserire a mano
 var wrap1 = el('div','table-scroll');
 var table1 = document.createElement('table'); table1.className='datatable';
 var head1 = '<tr><th>Mese</th>'+STATE.sites.map(function(s){return '<th>FT '+s.name+'</th>';}).join('')+'<th>FT TOTALE</th>'+
-STATE.sites.map(function(s){return '<th>Prod. '+s.name+'</th>';}).join('')+'<th>Prod. TOTALE</th></tr>';
+STATE.sites.map(function(s){return '<th>Prod. '+s.name+'</th>';}).join('')+'<th>Prod. TOTALE</th><th>PENDING</th></tr>';
 var body1 = '';
 var yr = isCurrentView ? null : findStatsYear(viewYear);
 for(var m=0;m<12;m++){
@@ -2477,7 +2593,9 @@ if(isCurrentView){ body1 += '<td>'+fmtEUR(v2)+'</td>'; }
 else { body1 += '<td><span class="money-cell"><input type="number" data-kind="prod" data-site="'+s.id+'" data-m="'+m+'" value="'+(v2||'')+'"/></span></td>'; }
 });
 var prodRow=0; STATE.sites.forEach(function(s){ prodRow += statsProduzioneMonthSite(viewYear,s.id,m); });
-body1 += '<td><b id="prod_tot_'+m+'">'+fmtEUR(prodRow)+'</b></td></tr>';
+body1 += '<td><b id="prod_tot_'+m+'">'+fmtEUR(prodRow)+'</b></td>';
+var pendingRow = ftRow - prodRow;
+body1 += '<td><b id="pending_'+m+'" class="'+(pendingRow>=0?'pos':'neg')+'">'+fmtEUR(pendingRow)+'</b></td></tr>';
 }
 table1.innerHTML = '<thead>'+head1+'</thead><tbody>'+body1+'</tbody>';
 wrap1.appendChild(table1); card1.appendChild(wrap1);
@@ -2493,6 +2611,11 @@ saveState();
 var rowTot = 0; STATE.sites.forEach(function(s){ rowTot += (kind==='rev'?statsRevenueMonthSite(viewYear,s.id,m):statsProduzioneMonthSite(viewYear,s.id,m)); });
 var totEl = document.getElementById((kind==='rev'?'ft_tot_':'prod_tot_')+m);
 if(totEl) totEl.textContent = fmtEUR(rowTot);
+var ftNow=0, prodNow=0;
+STATE.sites.forEach(function(s){ ftNow += statsRevenueMonthSite(viewYear,s.id,m); prodNow += statsProduzioneMonthSite(viewYear,s.id,m); });
+var pendingNow = ftNow - prodNow;
+var pendEl = document.getElementById('pending_'+m);
+if(pendEl){ pendEl.textContent = fmtEUR(pendingNow); pendEl.className = pendingNow>=0?'pos':'neg'; }
 });
 });
 }
@@ -2684,6 +2807,7 @@ main.appendChild(card);
 };
 startInactivityWatcher();
 bootApp();
+
 
 
 </script>
