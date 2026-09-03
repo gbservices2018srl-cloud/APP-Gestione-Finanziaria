@@ -68,7 +68,28 @@ def init_db():
             name TEXT NOT NULL,
             password_hash TEXT NOT NULL,
             created_at TEXT NOT NULL,
-            data TEXT NOT NULL DEFAULT '{}'
+            data TEXT NOT NULL DEFAULT '{}',
+            suspended INTEGER NOT NULL DEFAULT 0,
+            expires_at TEXT,
+            plan TEXT NOT NULL DEFAULT 'free'
+        )"""
+    )
+    # migrazione sicura: se il database esisteva gia' (creato prima di questa
+    # funzione), aggiunge solo le colonne mancanti senza toccare i dati.
+    existing_cols = [r[1] for r in db.execute("PRAGMA table_info(companies)").fetchall()]
+    if "suspended" not in existing_cols:
+        db.execute("ALTER TABLE companies ADD COLUMN suspended INTEGER NOT NULL DEFAULT 0")
+    if "expires_at" not in existing_cols:
+        db.execute("ALTER TABLE companies ADD COLUMN expires_at TEXT")
+    if "plan" not in existing_cols:
+        db.execute("ALTER TABLE companies ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'")
+    db.execute(
+        """CREATE TABLE IF NOT EXISTS password_reset_requests (
+            id TEXT PRIMARY KEY,
+            company_id TEXT NOT NULL,
+            company_name TEXT NOT NULL,
+            requested_at TEXT NOT NULL,
+            resolved INTEGER NOT NULL DEFAULT 0
         )"""
     )
     db.commit()
@@ -90,6 +111,84 @@ def require_company():
 
 def json_error(msg, code=400):
     return jsonify({"error": msg}), code
+
+
+def check_company_access():
+    """Verifica sospensione/scadenza per l'azienda gia' in sessione.
+    Va richiamata a OGNI richiesta autenticata (non solo al login), cosi'
+    se un admin sospende un'azienda mentre un cliente e' gia' collegato,
+    l'accesso si interrompe subito, non solo al prossimo login."""
+    db = get_db()
+    row = db.execute(
+        "SELECT suspended, expires_at FROM companies WHERE id=?",
+        (session.get("company_id"),)
+    ).fetchone()
+    if row is None:
+        session.clear()
+        return False, json_error("Azienda non trovata.", 404)
+    if row["suspended"]:
+        session.clear()
+        return False, json_error("Accesso sospeso. Contatta l'amministratore.", 403)
+    if row["expires_at"]:
+        try:
+            exp = datetime.datetime.fromisoformat(row["expires_at"].replace("Z", ""))
+            if datetime.datetime.utcnow() > exp:
+                session.clear()
+                return False, json_error("Abbonamento scaduto. Contatta l'amministratore per rinnovare.", 403)
+        except ValueError:
+            pass
+    return True, None
+
+
+# chiavi di primo livello dei dati aziendali che sono funzioni premium
+GATED_TOP_KEYS = ("incassi", "listino", "bankAccounts", "bankBalances", "statsYears")
+# dentro "budget", solo l'elenco dettagliato voci/percentuali e' premium:
+# i valori aggregati (fatturato stimato, ecc.) restano liberi
+GATED_BUDGET_SUBKEYS = ("fixed", "varPct")
+
+
+def strip_gated_data(data, plan):
+    """Toglie dalla risposta le sezioni premium se l'azienda e' sul piano free.
+    I dati restano salvati nel database (nel caso passi a pro in futuro),
+    vengono solo nascosti nella lettura."""
+    if plan == "pro" or not isinstance(data, dict):
+        return data
+    data = dict(data)
+    for k in GATED_TOP_KEYS:
+        data.pop(k, None)
+    if isinstance(data.get("budget"), dict):
+        budget = dict(data["budget"])
+        for k in GATED_BUDGET_SUBKEYS:
+            budget.pop(k, None)
+        data["budget"] = budget
+    return data
+
+
+def merge_gated_data(incoming, existing_raw, plan):
+    """Quando un'azienda free salva i propri dati, ignora qualunque modifica
+    alle sezioni premium (anche se qualcuno provasse a scriverle chiamando
+    l'API direttamente, scavalcando l'app) e mantiene quello che c'era
+    gia' salvato per quelle sezioni."""
+    if plan == "pro" or not isinstance(incoming, dict):
+        return incoming
+    existing = {}
+    try:
+        existing = json.loads(existing_raw or "{}")
+    except (TypeError, ValueError):
+        existing = {}
+    for k in GATED_TOP_KEYS:
+        if k in existing:
+            incoming[k] = existing[k]
+        else:
+            incoming.pop(k, None)
+    if isinstance(incoming.get("budget"), dict):
+        existing_budget = existing.get("budget") if isinstance(existing.get("budget"), dict) else {}
+        for k in GATED_BUDGET_SUBKEYS:
+            if k in existing_budget:
+                incoming["budget"][k] = existing_budget[k]
+            else:
+                incoming["budget"].pop(k, None)
+    return incoming
 
 
 # ================================================================= ADMIN
@@ -151,7 +250,9 @@ def admin_list_companies():
     if not require_admin():
         return json_error("Non autorizzato.", 401)
     db = get_db()
-    rows = db.execute("SELECT id, name, created_at FROM companies ORDER BY created_at DESC").fetchall()
+    rows = db.execute(
+        "SELECT id, name, created_at, suspended, expires_at, plan FROM companies ORDER BY created_at DESC"
+    ).fetchall()
     return jsonify({"companies": [dict(r) for r in rows]})
 
 
@@ -169,7 +270,8 @@ def admin_create_company():
     db = get_db()
     cid = uuid.uuid4().hex[:12]
     db.execute(
-        "INSERT INTO companies (id, name, password_hash, created_at, data) VALUES (?,?,?,?,?)",
+        "INSERT INTO companies (id, name, password_hash, created_at, data, suspended, expires_at, plan) "
+        "VALUES (?,?,?,?,?,0,NULL,'free')",
         (cid, name, generate_password_hash(password), now_iso(), "{}")
     )
     db.commit()
@@ -214,6 +316,74 @@ def admin_reset_company_password(cid):
     return jsonify({"ok": True})
 
 
+@app.route("/api/admin/companies/<cid>/suspend", methods=["PUT"])
+def admin_suspend_company(cid):
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    db = get_db()
+    db.execute("UPDATE companies SET suspended=1 WHERE id=?", (cid,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/companies/<cid>/unsuspend", methods=["PUT"])
+def admin_unsuspend_company(cid):
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    db = get_db()
+    db.execute("UPDATE companies SET suspended=0 WHERE id=?", (cid,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/companies/<cid>/expiry", methods=["PUT"])
+def admin_set_company_expiry(cid):
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    body = request.get_json(force=True, silent=True) or {}
+    expires_at = body.get("expiresAt") or None  # stringa data "YYYY-MM-DD", o None per togliere la scadenza
+    db = get_db()
+    db.execute("UPDATE companies SET expires_at=? WHERE id=?", (expires_at, cid))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/companies/<cid>/plan", methods=["PUT"])
+def admin_set_company_plan(cid):
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    body = request.get_json(force=True, silent=True) or {}
+    plan = body.get("plan")
+    if plan not in ("free", "pro"):
+        return json_error("Piano non valido: deve essere 'free' o 'pro'.")
+    db = get_db()
+    db.execute("UPDATE companies SET plan=? WHERE id=?", (plan, cid))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/password-reset-requests", methods=["GET"])
+def admin_list_reset_requests():
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    db = get_db()
+    rows = db.execute(
+        "SELECT id, company_id, company_name, requested_at, resolved FROM password_reset_requests "
+        "WHERE resolved=0 ORDER BY requested_at DESC"
+    ).fetchall()
+    return jsonify({"requests": [dict(r) for r in rows]})
+
+
+@app.route("/api/admin/password-reset-requests/<rid>/resolve", methods=["PUT"])
+def admin_resolve_reset_request(rid):
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    db = get_db()
+    db.execute("UPDATE password_reset_requests SET resolved=1 WHERE id=?", (rid,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
 @app.route("/api/admin/companies/<cid>/data", methods=["GET"])
 def admin_view_company_data(cid):
     if not require_admin():
@@ -232,9 +402,21 @@ def company_login():
     name = (body.get("name") or "").strip()
     password = body.get("password") or ""
     db = get_db()
-    row = db.execute("SELECT id, password_hash, name FROM companies WHERE name=?", (name,)).fetchone()
+    row = db.execute(
+        "SELECT id, password_hash, name, suspended, expires_at FROM companies WHERE name=?",
+        (name,)
+    ).fetchone()
     if row is None or not check_password_hash(row["password_hash"], password):
         return json_error("Nome azienda o password errati.", 401)
+    if row["suspended"]:
+        return json_error("Accesso sospeso. Contatta l'amministratore.", 403)
+    if row["expires_at"]:
+        try:
+            exp = datetime.datetime.fromisoformat(row["expires_at"].replace("Z", ""))
+            if datetime.datetime.utcnow() > exp:
+                return json_error("Abbonamento scaduto. Contatta l'amministratore per rinnovare.", 403)
+        except ValueError:
+            pass
     session.clear()
     session.permanent = True
     session["role"] = "company"
@@ -252,38 +434,101 @@ def company_logout():
 def company_me():
     if not require_company():
         return jsonify({"loggedIn": False})
+    ok, err = check_company_access()
+    if not ok:
+        return jsonify({"loggedIn": False})
     db = get_db()
-    row = db.execute("SELECT name FROM companies WHERE id=?", (session["company_id"],)).fetchone()
+    row = db.execute("SELECT name, plan FROM companies WHERE id=?", (session["company_id"],)).fetchone()
     if row is None:
         session.clear()
         return jsonify({"loggedIn": False})
-    return jsonify({"loggedIn": True, "name": row["name"]})
+    return jsonify({"loggedIn": True, "name": row["name"], "plan": row["plan"] or "free"})
 
 
 @app.route("/api/company/data", methods=["GET"])
 def company_get_data():
     if not require_company():
         return json_error("Non autorizzato.", 401)
+    ok, err = check_company_access()
+    if not ok:
+        return err
     db = get_db()
-    row = db.execute("SELECT data FROM companies WHERE id=?", (session["company_id"],)).fetchone()
+    row = db.execute("SELECT data, plan FROM companies WHERE id=?", (session["company_id"],)).fetchone()
     if row is None:
         return json_error("Azienda non trovata.", 404)
-    return jsonify({"data": json.loads(row["data"])})
+    plan = row["plan"] or "free"
+    data = strip_gated_data(json.loads(row["data"]), plan)
+    return jsonify({"data": data, "plan": plan})
 
 
 @app.route("/api/company/data", methods=["PUT"])
 def company_save_data():
     if not require_company():
         return json_error("Non autorizzato.", 401)
+    ok, err = check_company_access()
+    if not ok:
+        return err
     body = request.get_json(force=True, silent=True)
     if body is None or "data" not in body:
         return json_error("Corpo della richiesta non valido: manca 'data'.")
     db = get_db()
+    row = db.execute("SELECT data, plan FROM companies WHERE id=?", (session["company_id"],)).fetchone()
+    if row is None:
+        return json_error("Azienda non trovata.", 404)
+    plan = row["plan"] or "free"
+    incoming = merge_gated_data(body["data"], row["data"], plan)
     db.execute(
         "UPDATE companies SET data=? WHERE id=?",
-        (json.dumps(body["data"]), session["company_id"])
+        (json.dumps(incoming), session["company_id"])
     )
     db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/company/change-password", methods=["PUT"])
+def company_change_password():
+    if not require_company():
+        return json_error("Non autorizzato.", 401)
+    ok, err = check_company_access()
+    if not ok:
+        return err
+    body = request.get_json(force=True, silent=True) or {}
+    current = body.get("currentPassword") or ""
+    new = (body.get("newPassword") or "").strip()
+    db = get_db()
+    row = db.execute("SELECT password_hash FROM companies WHERE id=?", (session["company_id"],)).fetchone()
+    if row is None:
+        return json_error("Azienda non trovata.", 404)
+    if not check_password_hash(row["password_hash"], current):
+        return json_error("Password attuale errata.", 401)
+    if len(new) < 4:
+        return json_error("La nuova password deve avere almeno 4 caratteri.")
+    db.execute(
+        "UPDATE companies SET password_hash=? WHERE id=?",
+        (generate_password_hash(new), session["company_id"])
+    )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/company/forgot-password", methods=["POST"])
+def company_forgot_password():
+    body = request.get_json(force=True, silent=True) or {}
+    name = (body.get("name") or "").strip()
+    if not name:
+        return json_error("Inserisci il nome della tua azienda.")
+    db = get_db()
+    row = db.execute("SELECT id, name FROM companies WHERE name=?", (name,)).fetchone()
+    # rispondiamo sempre ok, azienda trovata o no: cosi' chi prova nomi a
+    # caso non scopre quali aziende esistono davvero
+    if row is not None:
+        rid = uuid.uuid4().hex[:12]
+        db.execute(
+            "INSERT INTO password_reset_requests (id, company_id, company_name, requested_at, resolved) "
+            "VALUES (?,?,?,?,0)",
+            (rid, row["id"], row["name"], now_iso())
+        )
+        db.commit()
     return jsonify({"ok": True})
 
 
