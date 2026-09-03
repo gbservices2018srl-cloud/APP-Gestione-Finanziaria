@@ -45,10 +45,12 @@ pre.datajson{background:#1e2a30; color:#d7e6e4; padding:14px; border-radius:8px;
 <body>
 <div id="app"></div>
 <script>
+
 async function apiGet(p){ var r = await fetch(p,{credentials:'include'}); var d=null; try{d=await r.json();}catch(e){} return {ok:r.ok,data:d}; }
 async function apiSend(p,m,b){ var r = await fetch(p,{method:m,credentials:'include',headers:{'Content-Type':'application/json'},body:b!==undefined?JSON.stringify(b):undefined}); var d=null; try{d=await r.json();}catch(e){} return {ok:r.ok,data:d}; }
 var view = 'loading';
 var companies = [];
+var resetRequests = [];
 var errMsg = '';
 var viewingData = null;
 function el(tag,cls,html){ var e=document.createElement(tag); if(cls)e.className=cls; if(html!==undefined)e.innerHTML=html; return e; }
@@ -56,12 +58,16 @@ async function boot(){
 var status = await apiGet('/api/admin/status');
 if(!status.ok){ view='login'; errMsg='Impossibile contattare il server.'; render(); return; }
 if(!status.data.configured){ view='setup'; render(); return; }
-if(status.data.loggedIn){ await loadCompanies(); view='panel'; render(); return; }
+if(status.data.loggedIn){ await loadCompanies(); await loadResetRequests(); view='panel'; render(); return; }
 view='login'; render();
 }
 async function loadCompanies(){
 var r = await apiGet('/api/admin/companies');
 if(r.ok) companies = r.data.companies || [];
+}
+async function loadResetRequests(){
+var r = await apiGet('/api/admin/password-reset-requests');
+if(r.ok) resetRequests = r.data.requests || [];
 }
 function render(){
 var app = document.getElementById('app');
@@ -149,16 +155,47 @@ await loadCompanies(); render();
 };
 createCard.appendChild(createBtn);
 frag.appendChild(createCard);
+
+if(resetRequests.length>0){
+var reqCard = el('div','card');
+reqCard.appendChild(el('h2','Richieste di reset password ('+resetRequests.length+')'));
+resetRequests.forEach(function(req){
+var row = el('div','input-row');
+row.appendChild(el('span',null,'<b>'+req.company_name.replace(/</g,'&lt;')+'</b> &mdash; richiesta il '+(req.requested_at||'').slice(0,16).replace('T',' ')));
+var genBtn = el('button','small-btn','Genera nuova password');
+genBtn.onclick = async function(){
+var newPw = prompt('Nuova password per "'+req.company_name+'" (almeno 4 caratteri), da comunicare tu al cliente:');
+if(newPw===null || newPw.trim().length<4) return;
+var r = await apiSend('/api/admin/companies/'+req.company_id+'/password','PUT',{password:newPw.trim()});
+if(r.ok){
+await apiSend('/api/admin/password-reset-requests/'+req.id+'/resolve','PUT');
+alert('Password aggiornata. Comunicala tu al cliente.');
+await loadResetRequests(); render();
+}
+};
+var dismissBtn = el('button','small-btn','Segna come gestita');
+dismissBtn.onclick = async function(){
+await apiSend('/api/admin/password-reset-requests/'+req.id+'/resolve','PUT');
+await loadResetRequests(); render();
+};
+row.appendChild(genBtn); row.appendChild(dismissBtn);
+reqCard.appendChild(row);
+});
+frag.appendChild(reqCard);
+}
+
 var listCard = el('div','card');
 listCard.appendChild(el('h2','Aziende ('+companies.length+')'));
 if(companies.length===0){
 listCard.appendChild(el('p',null,'Nessuna azienda creata ancora.'));
 } else {
 var table = document.createElement('table');
-var thead = '<tr><th>Nome</th><th>Creata il</th><th></th></tr>';
+var thead = '<tr><th>Nome</th><th>Piano</th><th>Stato</th><th>Scadenza</th><th>Creata il</th><th></th></tr>';
 var tbody = '';
 companies.forEach(function(c,idx){
-tbody += '<tr data-idx="'+idx+'"><td>'+c.name.replace(/</g,'&lt;')+'</td><td>'+(c.created_at||'').slice(0,10)+'</td><td class="actions-'+idx+'"></td></tr>';
+var statoLabel = c.suspended ? '<span style="color:var(--red);font-weight:700;">Sospeso</span>' : '<span style="color:var(--green,#3f8f5c);font-weight:700;">Attivo</span>';
+var scadenzaLabel = c.expires_at ? c.expires_at : '<span style="color:var(--text-soft,#888);">nessuna</span>';
+tbody += '<tr data-idx="'+idx+'"><td>'+c.name.replace(/</g,'&lt;')+'</td><td>'+(c.plan==='pro'?'PRO':'Free')+'</td><td>'+statoLabel+'</td><td>'+scadenzaLabel+'</td><td>'+(c.created_at||'').slice(0,10)+'</td><td class="actions-'+idx+'"></td></tr>';
 });
 table.innerHTML = '<thead>'+thead+'</thead><tbody>'+tbody+'</tbody>';
 listCard.appendChild(table);
@@ -186,13 +223,34 @@ if(newPw===null || newPw.trim().length<4) return;
 var r = await apiSend('/api/admin/companies/'+c.id+'/password','PUT',{password:newPw.trim()});
 if(r.ok) alert('Password aggiornata.');
 };
+var suspendBtn = el('button','small-btn', c.suspended?'Riattiva':'Sospendi');
+suspendBtn.onclick = async function(){
+var action = c.suspended ? 'unsuspend' : 'suspend';
+var r = await apiSend('/api/admin/companies/'+c.id+'/'+action,'PUT');
+if(r.ok){ await loadCompanies(); render(); }
+};
+var planBtn = el('button','small-btn', c.plan==='pro'?'Passa a Free':'Passa a Pro');
+planBtn.onclick = async function(){
+var newPlan = c.plan==='pro' ? 'free' : 'pro';
+var r = await apiSend('/api/admin/companies/'+c.id+'/plan','PUT',{plan:newPlan});
+if(r.ok){ await loadCompanies(); render(); }
+};
+var expiryBtn = el('button','small-btn', 'Scadenza');
+expiryBtn.onclick = async function(){
+var current = c.expires_at || '';
+var newDate = prompt('Data di scadenza per "'+c.name+'" (formato AAAA-MM-GG, es. 2026-12-31). Lascia vuoto per nessuna scadenza:', current);
+if(newDate===null) return;
+newDate = newDate.trim();
+var r = await apiSend('/api/admin/companies/'+c.id+'/expiry','PUT',{expiresAt: newDate||null});
+if(r.ok){ await loadCompanies(); render(); }
+};
 var delBtn = el('button','small-btn danger','Elimina');
 delBtn.onclick = async function(){
 if(!confirm('Eliminare definitivamente "'+c.name+'" e tutti i suoi dati? Non si pu\u00f2 annullare.')) return;
 var r = await apiSend('/api/admin/companies/'+c.id,'DELETE');
 if(r.ok){ await loadCompanies(); render(); }
 };
-[viewBtn,renameBtnEl,pwBtn,delBtn].forEach(function(b){ cell.appendChild(b); });
+[viewBtn,renameBtnEl,pwBtn,suspendBtn,planBtn,expiryBtn,delBtn].forEach(function(b){ cell.appendChild(b); });
 });
 }
 frag.appendChild(listCard);
@@ -225,6 +283,7 @@ frag.appendChild(dataCard);
 return frag;
 }
 boot();
+
 </script>
 </body>
 </html>
