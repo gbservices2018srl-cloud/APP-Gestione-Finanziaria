@@ -133,7 +133,7 @@ logoutBtn.onclick = async function(){ await apiSend('/api/admin/logout','POST');
 logoutRow.appendChild(logoutBtn);
 frag.appendChild(logoutRow);
 var createCard = el('div','card');
-createCard.appendChild(el('h2','Crea nuova azienda'));
+createCard.appendChild(el('h2',null,'Crea nuova azienda'));
 var nameRow = el('div','input-row');
 nameRow.appendChild(el('label',null,'Nome azienda'));
 var nameInp = document.createElement('input'); nameInp.type='text'; nameRow.appendChild(nameInp);
@@ -142,14 +142,18 @@ var pwRow = el('div','input-row');
 pwRow.appendChild(el('label',null,'Password iniziale'));
 var pwInp = document.createElement('input'); pwInp.type='text'; pwInp.placeholder='almeno 4 caratteri'; pwRow.appendChild(pwInp);
 createCard.appendChild(pwRow);
+var emailRow = el('div','input-row');
+emailRow.appendChild(el('label',null,'Email (facoltativa)'));
+var emailInp = document.createElement('input'); emailInp.type='email'; emailInp.placeholder='per notifiche e reset password'; emailRow.appendChild(emailInp);
+createCard.appendChild(emailRow);
 if(errMsg) createCard.appendChild(el('div','notice err',errMsg));
 var createBtn = el('button','btn','+ Crea azienda');
 createBtn.onclick = async function(){
 errMsg='';
-var name = nameInp.value.trim(), pw = pwInp.value.trim();
+var name = nameInp.value.trim(), pw = pwInp.value.trim(), email = emailInp.value.trim();
 if(!name){ errMsg='Inserisci un nome.'; render(); return; }
 if(pw.length<4){ errMsg='Password di almeno 4 caratteri.'; render(); return; }
-var r = await apiSend('/api/admin/companies','POST',{name:name,password:pw});
+var r = await apiSend('/api/admin/companies','POST',{name:name,password:pw,email:email||undefined});
 if(!r.ok){ errMsg=(r.data&&r.data.error)||'Errore nella creazione.'; render(); return; }
 await loadCompanies(); render();
 };
@@ -158,7 +162,7 @@ frag.appendChild(createCard);
 
 if(resetRequests.length>0){
 var reqCard = el('div','card');
-reqCard.appendChild(el('h2','Richieste di reset password ('+resetRequests.length+')'));
+reqCard.appendChild(el('h2',null,'Richieste di reset password ('+resetRequests.length+')'));
 resetRequests.forEach(function(req){
 var row = el('div','input-row');
 row.appendChild(el('span',null,'<b>'+req.company_name.replace(/</g,'&lt;')+'</b> &mdash; richiesta il '+(req.requested_at||'').slice(0,16).replace('T',' ')));
@@ -184,22 +188,49 @@ reqCard.appendChild(row);
 frag.appendChild(reqCard);
 }
 
+var pendingCompanies = companies.filter(function(c){ return !c.approved; });
+var approvedCompanies = companies.filter(function(c){ return c.approved; });
+
+if(pendingCompanies.length>0){
+var pendingCard = el('div','card');
+pendingCard.appendChild(el('h2',null,'In attesa di approvazione ('+pendingCompanies.length+')'));
+pendingCompanies.forEach(function(c){
+var row = el('div','input-row');
+row.appendChild(el('span',null,'<b>'+c.name.replace(/</g,'&lt;')+'</b> &mdash; '+(c.email?c.email.replace(/</g,'&lt;'):'nessuna email')));
+var approveBtn = el('button','small-btn','Approva');
+approveBtn.onclick = async function(){
+var r = await apiSend('/api/admin/companies/'+c.id+'/approve','PUT');
+if(r.ok){ await loadCompanies(); render(); }
+};
+var rejectBtn = el('button','small-btn danger','Rifiuta');
+rejectBtn.onclick = async function(){
+if(!confirm('Rifiutare ed eliminare la richiesta di "'+c.name+'"?')) return;
+var r = await apiSend('/api/admin/companies/'+c.id,'DELETE');
+if(r.ok){ await loadCompanies(); render(); }
+};
+row.appendChild(approveBtn); row.appendChild(rejectBtn);
+pendingCard.appendChild(row);
+});
+frag.appendChild(pendingCard);
+}
+
 var listCard = el('div','card');
-listCard.appendChild(el('h2','Aziende ('+companies.length+')'));
-if(companies.length===0){
-listCard.appendChild(el('p',null,'Nessuna azienda creata ancora.'));
+listCard.appendChild(el('h2',null,'Aziende ('+approvedCompanies.length+')'));
+if(approvedCompanies.length===0){
+listCard.appendChild(el('p',null,'Nessuna azienda attiva ancora.'));
 } else {
 var table = document.createElement('table');
-var thead = '<tr><th>Nome</th><th>Piano</th><th>Stato</th><th>Scadenza</th><th>Creata il</th><th></th></tr>';
+var thead = '<tr><th>Nome</th><th>Email</th><th>Piano</th><th>Stato</th><th>Scadenza</th><th>Creata il</th><th></th></tr>';
 var tbody = '';
-companies.forEach(function(c,idx){
+approvedCompanies.forEach(function(c,idx){
 var statoLabel = c.suspended ? '<span style="color:var(--red);font-weight:700;">Sospeso</span>' : '<span style="color:var(--green,#3f8f5c);font-weight:700;">Attivo</span>';
 var scadenzaLabel = c.expires_at ? c.expires_at : '<span style="color:var(--text-soft,#888);">nessuna</span>';
-tbody += '<tr data-idx="'+idx+'"><td>'+c.name.replace(/</g,'&lt;')+'</td><td>'+(c.plan==='pro'?'PRO':'Free')+'</td><td>'+statoLabel+'</td><td>'+scadenzaLabel+'</td><td>'+(c.created_at||'').slice(0,10)+'</td><td class="actions-'+idx+'"></td></tr>';
+var emailLabel = c.email ? c.email.replace(/</g,'&lt;') : '<span style="color:var(--text-soft,#888);">nessuna</span>';
+tbody += '<tr data-idx="'+idx+'"><td>'+c.name.replace(/</g,'&lt;')+'</td><td>'+emailLabel+'</td><td>'+(c.plan==='pro'?'PRO':'Free')+'</td><td>'+statoLabel+'</td><td>'+scadenzaLabel+'</td><td>'+(c.created_at||'').slice(0,10)+'</td><td class="actions-'+idx+'"></td></tr>';
 });
 table.innerHTML = '<thead>'+thead+'</thead><tbody>'+tbody+'</tbody>';
 listCard.appendChild(table);
-companies.forEach(function(c,idx){
+approvedCompanies.forEach(function(c,idx){
 var cell = table.querySelector('.actions-'+idx);
 var viewBtn = el('button','small-btn','Vedi dati');
 viewBtn.onclick = async function(){
@@ -256,7 +287,7 @@ if(r.ok){ await loadCompanies(); render(); }
 frag.appendChild(listCard);
 if(viewingData){
 var dataCard = el('div','card');
-dataCard.appendChild(el('h2','Dati di: '+viewingData.name));
+dataCard.appendChild(el('h2',null,'Dati di: '+viewingData.name));
 var d = viewingData.json || {};
 var isEmpty = Object.keys(d).length===0;
 if(isEmpty){

@@ -587,6 +587,10 @@ var companyDisplayName = '';
 var companyPlan = 'free';
 var loginError = '';
 var showForgotPassword = false;
+var showRegister = false;
+var registerSent = false;
+var resetToken = null;
+var resetDone = false;
 var forgotPasswordSent = false;
 var loginBusy = false;
 async function apiGet(path){
@@ -1132,6 +1136,10 @@ buildNav();
 updateBranding();
 var main = document.getElementById('main');
 main.innerHTML = '';
+if(resetToken){
+renderResetPasswordScreen(main);
+return;
+}
 if(!isLoggedIn){
 renderLoginScreen(main);
 return;
@@ -1185,7 +1193,98 @@ reader.onerror = function(){ callback(null); };
 reader.readAsDataURL(file);
 }
 var RENDERERS = {};
+function renderResetPasswordScreen(main){
+var wrap = el('div','auth-wrap');
+var box = el('div','auth-box');
+box.appendChild(el('h1','pagetitle','Imposta una nuova password'));
+if(resetDone){
+box.appendChild(el('p','pagesub','Fatto! La tua password \u00e8 stata aggiornata.'));
+var goLoginBtn = el('button','btn','Vai all\u2019accesso');
+goLoginBtn.onclick = function(){
+resetToken = null; resetDone = false;
+try{ window.history.replaceState({}, '', window.location.pathname); }catch(e){}
+render();
+};
+box.appendChild(goLoginBtn);
+wrap.appendChild(box); main.appendChild(wrap);
+return;
+}
+box.appendChild(el('p','pagesub','Scegli la nuova password per il tuo account. Il link \u00e8 valido per 1 ora dalla richiesta.'));
+var newRow = el('div','input-row');
+newRow.appendChild(el('label',null,'Nuova password'));
+var newInp = document.createElement('input'); newInp.type='password'; newInp.style.width='220px';
+newRow.appendChild(newInp);
+box.appendChild(newRow);
+var newRow2 = el('div','input-row');
+newRow2.appendChild(el('label',null,'Ripeti password'));
+var newInp2 = document.createElement('input'); newInp2.type='password'; newInp2.style.width='220px';
+newRow2.appendChild(newInp2);
+box.appendChild(newRow2);
+if(loginError){ box.appendChild(el('div','notebox', loginError)); }
+var confirmBtn = el('button','btn','Conferma nuova password');
+confirmBtn.onclick = async function(){
+loginError='';
+if(newInp.value.length<4){ loginError='La password deve avere almeno 4 caratteri.'; render(); return; }
+if(newInp.value!==newInp2.value){ loginError='Le due password non coincidono.'; render(); return; }
+var r = await apiSend('/api/company/reset-password','POST',{token:resetToken, newPassword:newInp.value});
+if(r.ok){ resetDone = true; render(); }
+else { loginError = (r.data&&r.data.error)||'Errore, riprova.'; render(); }
+};
+box.appendChild(confirmBtn);
+wrap.appendChild(box);
+main.appendChild(wrap);
+}
+
+function renderRegisterScreen(main){
+var wrap = el('div','auth-wrap');
+var box = el('div','auth-box');
+box.appendChild(el('h1','pagetitle','Richiedi un account'));
+if(registerSent){
+box.appendChild(el('p','pagesub','Richiesta inviata! Riceverai una email quando l\u2019account sar\u00e0 attivato.'));
+var backBtn2 = el('button','btn secondary','Torna all\u2019accesso');
+backBtn2.onclick = function(){ showRegister=false; registerSent=false; loginError=''; render(); };
+box.appendChild(backBtn2);
+wrap.appendChild(box); main.appendChild(wrap);
+return;
+}
+box.appendChild(el('p','pagesub','Compila i dati della tua azienda: la richiesta verr\u00e0 esaminata prima dell\u2019attivazione.'));
+var rNameRow = el('div','input-row');
+rNameRow.appendChild(el('label',null,'Nome azienda'));
+var rNameInp = document.createElement('input'); rNameInp.type='text'; rNameInp.style.width='220px';
+rNameRow.appendChild(rNameInp);
+box.appendChild(rNameRow);
+var rEmailRow = el('div','input-row');
+rEmailRow.appendChild(el('label',null,'Email'));
+var rEmailInp = document.createElement('input'); rEmailInp.type='email'; rEmailInp.style.width='220px';
+rEmailRow.appendChild(rEmailInp);
+box.appendChild(rEmailRow);
+var rPwRow = el('div','input-row');
+rPwRow.appendChild(el('label',null,'Password'));
+var rPwInp = document.createElement('input'); rPwInp.type='password'; rPwInp.style.width='220px';
+rPwRow.appendChild(rPwInp);
+box.appendChild(rPwRow);
+if(loginError){ box.appendChild(el('div','notebox', loginError)); }
+var registerBtn = el('button','btn','Invia richiesta');
+registerBtn.onclick = async function(){
+loginError='';
+if(!rNameInp.value.trim()){ loginError='Inserisci il nome della tua azienda.'; render(); return; }
+if(!rEmailInp.value.trim() || rEmailInp.value.indexOf('@')===-1){ loginError='Inserisci un\u2019email valida.'; render(); return; }
+if(rPwInp.value.length<4){ loginError='La password deve avere almeno 4 caratteri.'; render(); return; }
+var r = await apiSend('/api/company/register','POST',{name:rNameInp.value.trim(), email:rEmailInp.value.trim(), password:rPwInp.value});
+if(r.ok){ registerSent = true; render(); }
+else { loginError = (r.data&&r.data.error)||'Errore, riprova.'; render(); }
+};
+box.appendChild(registerBtn);
+var backBtn = el('button','btn secondary','Torna all\u2019accesso');
+backBtn.style.marginLeft='10px';
+backBtn.onclick = function(){ showRegister=false; loginError=''; render(); };
+box.appendChild(backBtn);
+wrap.appendChild(box);
+main.appendChild(wrap);
+}
+
 function renderLoginScreen(main){
+if(showRegister){ renderRegisterScreen(main); return; }
 var wrap = el('div','auth-wrap');
 var box = el('div','auth-box');
 if(showForgotPassword){
@@ -1248,6 +1347,11 @@ forgotLink.style.cssText = 'margin-top:14px;text-align:center;';
 forgotLink.innerHTML = '<a href="#" style="font-size:12.5px;color:var(--teal);">Password dimenticata?</a>';
 forgotLink.querySelector('a').onclick = function(ev){ ev.preventDefault(); showForgotPassword=true; loginError=''; render(); };
 box.appendChild(forgotLink);
+var registerLink = document.createElement('div');
+registerLink.style.cssText = 'margin-top:8px;text-align:center;';
+registerLink.innerHTML = '<a href="#" style="font-size:12.5px;color:var(--teal);">Non hai un account? Richiedine uno</a>';
+registerLink.querySelector('a').onclick = function(ev){ ev.preventDefault(); showRegister=true; loginError=''; render(); };
+box.appendChild(registerLink);
 wrap.appendChild(box);
 main.appendChild(wrap);
 setTimeout(function(){ nameInp.focus(); }, 30);
@@ -2966,6 +3070,10 @@ var mobileMenuBtn = document.getElementById('mobileMenuBtn');
 if(mobileMenuBtn) mobileMenuBtn.addEventListener('click', toggleMobileMenu);
 var sidebarBackdropEl = document.getElementById('sidebarBackdrop');
 if(sidebarBackdropEl) sidebarBackdropEl.addEventListener('click', closeMobileMenu);
+try{
+var urlParams = new URLSearchParams(window.location.search);
+if(urlParams.get('reset')) resetToken = urlParams.get('reset');
+}catch(e){}
 startInactivityWatcher();
 bootApp();
 
