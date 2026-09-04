@@ -275,13 +275,22 @@ newDate = newDate.trim();
 var r = await apiSend('/api/admin/companies/'+c.id+'/expiry','PUT',{expiresAt: newDate||null});
 if(r.ok){ await loadCompanies(); render(); }
 };
+var emailBtn = el('button','small-btn', c.email ? 'Modifica email' : 'Imposta email');
+emailBtn.onclick = async function(){
+var newEmail = prompt('Email per "'+c.name+'" (serve per gli avvisi e il reset password diretto al cliente):', c.email||'');
+if(newEmail===null) return;
+newEmail = newEmail.trim();
+if(newEmail && newEmail.indexOf('@')===-1){ alert('Indirizzo email non valido.'); return; }
+var r = await apiSend('/api/admin/companies/'+c.id+'/email','PUT',{email:newEmail});
+if(r.ok){ await loadCompanies(); render(); }
+};
 var delBtn = el('button','small-btn danger','Elimina');
 delBtn.onclick = async function(){
 if(!confirm('Eliminare definitivamente "'+c.name+'" e tutti i suoi dati? Non si pu\u00f2 annullare.')) return;
 var r = await apiSend('/api/admin/companies/'+c.id,'DELETE');
 if(r.ok){ await loadCompanies(); render(); }
 };
-[viewBtn,renameBtnEl,pwBtn,suspendBtn,planBtn,expiryBtn,delBtn].forEach(function(b){ cell.appendChild(b); });
+[viewBtn,renameBtnEl,pwBtn,suspendBtn,planBtn,expiryBtn,emailBtn,delBtn].forEach(function(b){ cell.appendChild(b); });
 });
 }
 frag.appendChild(listCard);
