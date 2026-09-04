@@ -432,6 +432,20 @@ def admin_set_company_plan(cid):
     return jsonify({"ok": True})
 
 
+@app.route("/api/admin/companies/<cid>/email", methods=["PUT"])
+def admin_set_company_email(cid):
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    body = request.get_json(force=True, silent=True) or {}
+    email = (body.get("email") or "").strip() or None
+    if email and "@" not in email:
+        return json_error("Indirizzo email non valido.")
+    db = get_db()
+    db.execute("UPDATE companies SET email=? WHERE id=?", (email, cid))
+    db.commit()
+    return jsonify({"ok": True})
+
+
 @app.route("/api/admin/password-reset-requests", methods=["GET"])
 def admin_list_reset_requests():
     if not require_admin():
