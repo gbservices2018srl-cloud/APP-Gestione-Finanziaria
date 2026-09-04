@@ -519,6 +519,18 @@ def company_register():
         (cid, name, email, generate_password_hash(password), now_iso(), "{}")
     )
     db.commit()
+    # riepilogo al cliente, mandato SOLO ora: e' l'unico momento in cui il
+    # server vede la password in chiaro, prima di cifrarla per sempre
+    send_email_safe(
+        email,
+        "Richiesta ricevuta - " + name,
+        "Ciao,\nabbiamo ricevuto la tua richiesta di accesso. Ecco il riepilogo dei dati che hai inserito:\n\n"
+        "Nome azienda: " + name + "\n"
+        "Email: " + email + "\n"
+        "Password scelta: " + password + "\n\n"
+        "Conservali in un posto sicuro: sono le credenziali che userai per accedere.\n"
+        "La richiesta e' ora in attesa di approvazione: riceverai un'altra email quando l'account sara' attivo."
+    )
     send_email_safe(
         get_admin_notify_email(),
         "Nuova richiesta di accesso: " + name,
