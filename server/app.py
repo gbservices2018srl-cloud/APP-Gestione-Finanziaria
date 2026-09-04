@@ -18,7 +18,10 @@ import os
 import json
 import sqlite3
 import uuid
+import secrets
+import smtplib
 import datetime
+from email.mime.text import MIMEText
 from flask import Flask, request, jsonify, session, g, send_from_directory
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -71,7 +74,9 @@ def init_db():
             data TEXT NOT NULL DEFAULT '{}',
             suspended INTEGER NOT NULL DEFAULT 0,
             expires_at TEXT,
-            plan TEXT NOT NULL DEFAULT 'free'
+            plan TEXT NOT NULL DEFAULT 'free',
+            email TEXT,
+            approved INTEGER NOT NULL DEFAULT 1
         )"""
     )
     # migrazione sicura: se il database esisteva gia' (creato prima di questa
@@ -83,6 +88,12 @@ def init_db():
         db.execute("ALTER TABLE companies ADD COLUMN expires_at TEXT")
     if "plan" not in existing_cols:
         db.execute("ALTER TABLE companies ADD COLUMN plan TEXT NOT NULL DEFAULT 'free'")
+    if "email" not in existing_cols:
+        db.execute("ALTER TABLE companies ADD COLUMN email TEXT")
+    if "approved" not in existing_cols:
+        # le aziende gia' esistenti (create prima di questa funzione) sono
+        # gia' attive: non deve servire una nuova approvazione per loro
+        db.execute("ALTER TABLE companies ADD COLUMN approved INTEGER NOT NULL DEFAULT 1")
     db.execute(
         """CREATE TABLE IF NOT EXISTS password_reset_requests (
             id TEXT PRIMARY KEY,
@@ -92,8 +103,46 @@ def init_db():
             resolved INTEGER NOT NULL DEFAULT 0
         )"""
     )
+    db.execute(
+        """CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            token TEXT PRIMARY KEY,
+            company_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            used INTEGER NOT NULL DEFAULT 0
+        )"""
+    )
     db.commit()
     db.close()
+
+
+def send_email_safe(to_addr, subject, body):
+    """Invia una email tramite Gmail SMTP. Non fa mai fallire la richiesta
+    HTTP in corso se l'invio non riesce (es. SMTP non configurato): logga
+    solo un avviso e restituisce False."""
+    if not to_addr:
+        return False
+    smtp_email = os.environ.get("SMTP_EMAIL")
+    smtp_password = os.environ.get("SMTP_APP_PASSWORD")
+    if not smtp_email or not smtp_password:
+        app.logger.warning("SMTP non configurato: email non inviata a %s (%s)", to_addr, subject)
+        return False
+    try:
+        msg = MIMEText(body)
+        msg["Subject"] = subject
+        msg["From"] = smtp_email
+        msg["To"] = to_addr
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
+            server.login(smtp_email, smtp_password)
+            server.sendmail(smtp_email, [to_addr], msg.as_string())
+        return True
+    except Exception as e:
+        app.logger.warning("Invio email fallito verso %s: %s", to_addr, e)
+        return False
+
+
+def get_admin_notify_email():
+    return os.environ.get("ADMIN_NOTIFY_EMAIL", "")
 
 
 def now_iso():
@@ -251,7 +300,7 @@ def admin_list_companies():
         return json_error("Non autorizzato.", 401)
     db = get_db()
     rows = db.execute(
-        "SELECT id, name, created_at, suspended, expires_at, plan FROM companies ORDER BY created_at DESC"
+        "SELECT id, name, email, created_at, suspended, expires_at, plan, approved FROM companies ORDER BY created_at DESC"
     ).fetchall()
     return jsonify({"companies": [dict(r) for r in rows]})
 
@@ -263,19 +312,40 @@ def admin_create_company():
     body = request.get_json(force=True, silent=True) or {}
     name = (body.get("name") or "").strip()
     password = (body.get("password") or "").strip()
+    email = (body.get("email") or "").strip() or None
     if not name:
         return json_error("Il nome dell'azienda e' obbligatorio.")
     if len(password) < 4:
         return json_error("La password deve avere almeno 4 caratteri.")
     db = get_db()
     cid = uuid.uuid4().hex[:12]
+    # creata direttamente dal master: gia' approvata, non serve revisione
     db.execute(
-        "INSERT INTO companies (id, name, password_hash, created_at, data, suspended, expires_at, plan) "
-        "VALUES (?,?,?,?,?,0,NULL,'free')",
-        (cid, name, generate_password_hash(password), now_iso(), "{}")
+        "INSERT INTO companies (id, name, email, password_hash, created_at, data, suspended, expires_at, plan, approved) "
+        "VALUES (?,?,?,?,?,?,0,NULL,'free',1)",
+        (cid, name, email, generate_password_hash(password), now_iso(), "{}")
     )
     db.commit()
     return jsonify({"id": cid, "name": name})
+
+
+@app.route("/api/admin/companies/<cid>/approve", methods=["PUT"])
+def admin_approve_company(cid):
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    db = get_db()
+    row = db.execute("SELECT name, email FROM companies WHERE id=?", (cid,)).fetchone()
+    if row is None:
+        return json_error("Azienda non trovata.", 404)
+    db.execute("UPDATE companies SET approved=1 WHERE id=?", (cid,))
+    db.commit()
+    if row["email"]:
+        send_email_safe(
+            row["email"],
+            "Il tuo account e' stato attivato",
+            "Ciao,\nil tuo account \"" + row["name"] + "\" e' stato approvato: da ora puoi accedere normalmente."
+        )
+    return jsonify({"ok": True})
 
 
 @app.route("/api/admin/companies/<cid>", methods=["DELETE"])
@@ -403,11 +473,13 @@ def company_login():
     password = body.get("password") or ""
     db = get_db()
     row = db.execute(
-        "SELECT id, password_hash, name, suspended, expires_at FROM companies WHERE name=?",
+        "SELECT id, password_hash, name, suspended, expires_at, approved FROM companies WHERE name=?",
         (name,)
     ).fetchone()
     if row is None or not check_password_hash(row["password_hash"], password):
         return json_error("Nome azienda o password errati.", 401)
+    if not row["approved"]:
+        return json_error("Il tuo account e' in attesa di approvazione. Riceverai una email quando sara' attivo.", 403)
     if row["suspended"]:
         return json_error("Accesso sospeso. Contatta l'amministratore.", 403)
     if row["expires_at"]:
@@ -422,6 +494,38 @@ def company_login():
     session["role"] = "company"
     session["company_id"] = row["id"]
     return jsonify({"ok": True, "name": row["name"]})
+
+
+@app.route("/api/company/register", methods=["POST"])
+def company_register():
+    body = request.get_json(force=True, silent=True) or {}
+    name = (body.get("name") or "").strip()
+    email = (body.get("email") or "").strip()
+    password = (body.get("password") or "").strip()
+    if not name:
+        return json_error("Inserisci il nome della tua azienda.")
+    if not email or "@" not in email:
+        return json_error("Inserisci un indirizzo email valido.")
+    if len(password) < 4:
+        return json_error("La password deve avere almeno 4 caratteri.")
+    db = get_db()
+    existing = db.execute("SELECT id FROM companies WHERE name=?", (name,)).fetchone()
+    if existing is not None:
+        return json_error("Esiste gia' un account con questo nome azienda. Scegline un altro o contatta l'assistenza.")
+    cid = uuid.uuid4().hex[:12]
+    db.execute(
+        "INSERT INTO companies (id, name, email, password_hash, created_at, data, suspended, expires_at, plan, approved) "
+        "VALUES (?,?,?,?,?,?,0,NULL,'free',0)",
+        (cid, name, email, generate_password_hash(password), now_iso(), "{}")
+    )
+    db.commit()
+    send_email_safe(
+        get_admin_notify_email(),
+        "Nuova richiesta di accesso: " + name,
+        "L'azienda \"" + name + "\" (" + email + ") ha richiesto un account.\n"
+        "Vai sul pannello master per approvarla, prima che possa accedere."
+    )
+    return jsonify({"ok": True})
 
 
 @app.route("/api/company/logout", methods=["POST"])
@@ -518,17 +622,70 @@ def company_forgot_password():
     if not name:
         return json_error("Inserisci il nome della tua azienda.")
     db = get_db()
-    row = db.execute("SELECT id, name FROM companies WHERE name=?", (name,)).fetchone()
+    row = db.execute("SELECT id, name, email FROM companies WHERE name=?", (name,)).fetchone()
     # rispondiamo sempre ok, azienda trovata o no: cosi' chi prova nomi a
     # caso non scopre quali aziende esistono davvero
     if row is not None:
-        rid = uuid.uuid4().hex[:12]
-        db.execute(
-            "INSERT INTO password_reset_requests (id, company_id, company_name, requested_at, resolved) "
-            "VALUES (?,?,?,?,0)",
-            (rid, row["id"], row["name"], now_iso())
-        )
-        db.commit()
+        if row["email"]:
+            token = secrets.token_urlsafe(32)
+            expires = (datetime.datetime.utcnow() + datetime.timedelta(hours=1)).isoformat()
+            db.execute(
+                "INSERT INTO password_reset_tokens (token, company_id, created_at, expires_at, used) "
+                "VALUES (?,?,?,?,0)",
+                (token, row["id"], now_iso(), expires)
+            )
+            db.commit()
+            reset_link = request.host_url.rstrip("/") + "/?reset=" + token
+            send_email_safe(
+                row["email"],
+                "Reimposta la password - " + row["name"],
+                "Ciao,\nhai richiesto di reimpostare la password per \"" + row["name"] + "\".\n\n"
+                "Clicca qui per sceglierne una nuova (valido 1 ora):\n" + reset_link + "\n\n"
+                "Se non sei stato tu a richiederlo, ignora pure questa email: la tua password attuale resta valida."
+            )
+        else:
+            # nessuna email registrata (es. account creato a mano dall'admin
+            # prima di questa funzione): resta il percorso di riserva, visibile
+            # nel pannello master
+            rid = uuid.uuid4().hex[:12]
+            db.execute(
+                "INSERT INTO password_reset_requests (id, company_id, company_name, requested_at, resolved) "
+                "VALUES (?,?,?,?,0)",
+                (rid, row["id"], row["name"], now_iso())
+            )
+            db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/company/reset-password", methods=["POST"])
+def company_reset_password_with_token():
+    body = request.get_json(force=True, silent=True) or {}
+    token = (body.get("token") or "").strip()
+    new_password = (body.get("newPassword") or "").strip()
+    if not token:
+        return json_error("Link non valido.")
+    if len(new_password) < 4:
+        return json_error("La nuova password deve avere almeno 4 caratteri.")
+    db = get_db()
+    row = db.execute(
+        "SELECT company_id, expires_at, used FROM password_reset_tokens WHERE token=?", (token,)
+    ).fetchone()
+    if row is None:
+        return json_error("Link non valido o gia' utilizzato.", 400)
+    if row["used"]:
+        return json_error("Questo link e' gia' stato utilizzato. Richiedine uno nuovo se ti serve.", 400)
+    try:
+        exp = datetime.datetime.fromisoformat(row["expires_at"])
+        if datetime.datetime.utcnow() > exp:
+            return json_error("Questo link e' scaduto (valido 1 ora). Richiedine uno nuovo.", 400)
+    except ValueError:
+        return json_error("Link non valido.", 400)
+    db.execute(
+        "UPDATE companies SET password_hash=? WHERE id=?",
+        (generate_password_hash(new_password), row["company_id"])
+    )
+    db.execute("UPDATE password_reset_tokens SET used=1 WHERE token=?", (token,))
+    db.commit()
     return jsonify({"ok": True})
 
 
