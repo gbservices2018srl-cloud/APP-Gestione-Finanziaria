@@ -273,6 +273,7 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 
 
 
+
 var MONTHS = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 var MONTHS_SHORT = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 var FIXED_ITEMS_SEED = JSON.parse(document.getElementById('fixedItemsData').textContent);
@@ -1721,6 +1722,7 @@ main.appendChild(upgradeBox);
 return;
 }
 main.appendChild(el('p','pagesub','Qui si costruisce la struttura dell\u2019azienda: sedi, macro-gruppi di costo e singole voci. Ogni modifica si riflette automaticamente in Scostamenti, Consuntivo e nelle altre pagine.'));
+main.appendChild(el('div','notebox','&#128197; <b>Inserire le voci di costo su base MENSILE.</b>'));
 main.appendChild(makeDownloadButton('budget_costi'));
 var siteCard = el('div','card');
 siteCard.appendChild(el('h2',null,'Sedi / centri'));
@@ -3076,6 +3078,7 @@ if(urlParams.get('reset')) resetToken = urlParams.get('reset');
 }catch(e){}
 startInactivityWatcher();
 bootApp();
+
 
 
 
