@@ -776,6 +776,7 @@ STATE.bankAccounts.push({id:id, name:name||'Nuovo conto corrente'});
 STATE.bankBalances[id] = {};
 ensureBankYear(id, STATE.currentYear);
 STATE.statsYears.forEach(function(y){ ensureBankYear(id, y.year); });
+STATE.yearArchives.forEach(function(y){ ensureBankYear(id, y.year); });
 saveState();
 return id;
 }
@@ -1083,6 +1084,50 @@ saveState();
 function removeCEColumn(id){
 STATE.ceColumns = STATE.ceColumns.filter(function(c){return c.id!==id;});
 saveState();
+}
+function buildHistoricalMonthlySeries(){
+var years = [];
+STATE.yearArchives.forEach(function(a){ if(years.indexOf(a.year)===-1) years.push(a.year); });
+STATE.statsYears.forEach(function(a){ if(years.indexOf(a.year)===-1) years.push(a.year); });
+if(years.indexOf(STATE.currentYear)===-1) years.push(STATE.currentYear);
+years.sort(function(a,b){ return a-b; });
+
+var labels = [], revenueData = [], produzioneData = [], liquidityData = [];
+
+years.forEach(function(year){
+var isCurrentYear = (year === STATE.currentYear);
+var yearArchive = STATE.yearArchives.find(function(a){ return a.year===year; });
+var statsYear = findStatsYear(year);
+
+for(var m=0; m<12; m++){
+labels.push(MONTHS_SHORT[m]+' \u2019'+String(year).slice(2));
+
+var revSum = 0, prodSum = 0;
+if(isCurrentYear){
+revSum = consRevenueMonthAll(m);
+prodSum = consProduzioneMonthAll(m);
+} else if(yearArchive){
+yearArchive.sites.forEach(function(s){
+var revArr = yearArchive.consuntivo.revenue[s.id];
+if(revArr) revSum += Number(revArr[m])||0;
+var prodArr = yearArchive.consuntivo.produzione[s.id];
+if(prodArr) prodSum += Number(prodArr[m])||0;
+});
+} else if(statsYear){
+STATE.sites.forEach(function(s){
+var revArr = statsYear.revenue[s.id];
+if(revArr) revSum += Number(revArr[m])||0;
+var prodArr = statsYear.produzione[s.id];
+if(prodArr) prodSum += Number(prodArr[m])||0;
+});
+}
+revenueData.push(revSum);
+produzioneData.push(prodSum);
+liquidityData.push(bankTotalMonth(year, m));
+}
+});
+
+return {labels:labels, revenue:revenueData, produzione:produzioneData, liquidity:liquidityData};
 }
 function archiveCurrentYear(year){
 if(STATE._editingArchivedYear!==null) return false;
@@ -1806,6 +1851,15 @@ main.appendChild(two);
 var c3 = el('div','card'); c3.appendChild(el('h2',null,'Budget annuo per sede (costi fissi)'));
 var chart3 = el('div','chart-wrap'); var cv3=document.createElement('canvas'); chart3.appendChild(cv3); c3.appendChild(chart3);
 main.appendChild(c3);
+main.appendChild(el('div','section-title','Andamento storico dell\u2019azienda'));
+var c3b = el('div','card'); c3b.appendChild(el('h2',null,'Fatturato e produzione, dalla nascita ad oggi'));
+c3b.appendChild(el('div','help-tip','Include automaticamente tutti gli anni chiusi con "Chiudi anno" (Backup dati), pi\u00f9 l\u2019anno corrente sempre aggiornato in tempo reale.'));
+var chart3b = el('div','chart-wrap'); chart3b.style.height='380px'; var cv3b=document.createElement('canvas'); chart3b.appendChild(cv3b); c3b.appendChild(chart3b);
+main.appendChild(c3b);
+var c3c = el('div','card'); c3c.appendChild(el('h2',null,'Liquidit\u00e0, dalla nascita ad oggi'));
+c3c.appendChild(el('div','help-tip','Somma dei saldi di tutti i conti correnti (Statistiche storiche), mese per mese, su tutti gli anni disponibili.'));
+var chart3c = el('div','chart-wrap'); chart3c.style.height='380px'; var cv3c=document.createElement('canvas'); chart3c.appendChild(cv3c); c3c.appendChild(chart3c);
+main.appendChild(c3c);
 main.appendChild(el('div','section-title','Fatturato'));
 var c4 = el('div','card'); c4.appendChild(el('h2',null,'Andamento fatturato per sede'));
 c4.appendChild(el('div','help-tip','Clicca sui nomi nella legenda per nascondere/mostrare la linea di una sede.'));
@@ -1826,6 +1880,14 @@ new Chart(cv2,{type:'doughnut',data:{labels:['Costi fissi','Costi variabili'],da
 options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
 new Chart(cv3,{type:'bar',data:{labels:budget.perSite.map(function(p){return p.siteName;}),datasets:[{label:'Budget annuo costi fissi',data:budget.perSite.map(function(p){return p.totFixedMese*12;}),backgroundColor:'#A36EA6'}]},
 options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},indexAxis:'y'}});
+var histSeries = buildHistoricalMonthlySeries();
+new Chart(cv3b,{type:'line',data:{labels:histSeries.labels,datasets:[
+{label:'Fatturato', data:histSeries.revenue, borderColor:'#2F8F9E', backgroundColor:'#2F8F9E', fill:false, tension:.2, pointRadius:2},
+{label:'Produzione', data:histSeries.produzione, borderColor:'#A36EA6', backgroundColor:'#A36EA6', fill:false, tension:.2, pointRadius:2}
+]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+new Chart(cv3c,{type:'line',data:{labels:histSeries.labels,datasets:[
+{label:'Liquidit\u00e0 totale', data:histSeries.liquidity, borderColor:'#3f8f5c', backgroundColor:'rgba(63,143,92,.15)', fill:true, tension:.2, pointRadius:2}
+]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
 var siteColors4 = ['#2F8F9E','#3B2647','#A36EA6','#c0483f','#3f8f5c','#F1E44D','#5A3D68','#e07b39','#4a90d9','#9b59b6'];
 var dsRev = [], dsProd = [];
 STATE.sites.forEach(function(s,idx){
@@ -2919,7 +2981,9 @@ if(STATE.sites.length===0){
 main.appendChild(el('div','notebox','Crea almeno una sede in <b>Budget costi</b> per usare questa pagina.'));
 return;
 }
-var years = [STATE.currentYear].concat(STATE.statsYears.map(function(y){return y.year;})).sort(function(a,b){return b-a;});
+var years = [STATE.currentYear].concat(STATE.statsYears.map(function(y){return y.year;})).concat(STATE.yearArchives.map(function(y){return y.year;}));
+years = years.filter(function(y,idx){ return years.indexOf(y)===idx; });
+years.sort(function(a,b){return b-a;});
 if(statsSelectedYear===null || years.indexOf(statsSelectedYear)===-1) statsSelectedYear = STATE.currentYear;
 var yearSel = el('div','site-selector');
 years.forEach(function(y){
