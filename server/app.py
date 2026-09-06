@@ -768,41 +768,48 @@ def company_change_password():
 def company_forgot_password():
     body = request.get_json(force=True, silent=True) or {}
     name = (body.get("name") or "").strip()
+    email = (body.get("email") or "").strip()
     if not name:
         return json_error("Inserisci il nome della tua azienda.")
+    if not email:
+        return json_error("Inserisci l'email con cui ti sei registrato.")
     db = get_db()
     row = db.execute("SELECT id, name, email FROM companies WHERE name=?", (name,)).fetchone()
-    # rispondiamo sempre ok, azienda trovata o no: cosi' chi prova nomi a
-    # caso non scopre quali aziende esistono davvero
-    if row is not None:
-        if row["email"]:
-            token = secrets.token_urlsafe(32)
-            expires = (datetime.datetime.utcnow() + datetime.timedelta(hours=1)).isoformat()
-            db.execute(
-                "INSERT INTO password_reset_tokens (token, company_id, created_at, expires_at, used) "
-                "VALUES (?,?,?,?,0)",
-                (token, row["id"], now_iso(), expires)
-            )
-            db.commit()
-            reset_link = request.host_url.rstrip("/") + "/?reset=" + token
-            send_email_safe(
-                row["email"],
-                "Reimposta la password - " + row["name"],
-                "Ciao,\nhai richiesto di reimpostare la password per \"" + row["name"] + "\".\n\n"
-                "Clicca qui per sceglierne una nuova (valido 1 ora):\n" + reset_link + "\n\n"
-                "Se non sei stato tu a richiederlo, ignora pure questa email: la tua password attuale resta valida."
-            )
-        else:
-            # nessuna email registrata (es. account creato a mano dall'admin
-            # prima di questa funzione): resta il percorso di riserva, visibile
-            # nel pannello master
-            rid = uuid.uuid4().hex[:12]
-            db.execute(
-                "INSERT INTO password_reset_requests (id, company_id, company_name, requested_at, resolved) "
-                "VALUES (?,?,?,?,0)",
-                (rid, row["id"], row["name"], now_iso())
-            )
-            db.commit()
+    # rispondiamo sempre ok, azienda trovata o no, email corrispondente o no:
+    # cosi' chi prova nomi/email a caso non scopre quali aziende esistono
+    # davvero, ne' quale email e' associata a un nome azienda
+    email_matches = (
+        row is not None and row["email"] is not None
+        and row["email"].strip().lower() == email.lower()
+    )
+    if row is not None and email_matches:
+        token = secrets.token_urlsafe(32)
+        expires = (datetime.datetime.utcnow() + datetime.timedelta(hours=1)).isoformat()
+        db.execute(
+            "INSERT INTO password_reset_tokens (token, company_id, created_at, expires_at, used) "
+            "VALUES (?,?,?,?,0)",
+            (token, row["id"], now_iso(), expires)
+        )
+        db.commit()
+        reset_link = request.host_url.rstrip("/") + "/?reset=" + token
+        send_email_safe(
+            row["email"],
+            "Reimposta la password - " + row["name"],
+            "Ciao,\nhai richiesto di reimpostare la password per \"" + row["name"] + "\".\n\n"
+            "Clicca qui per sceglierne una nuova (valido 1 ora):\n" + reset_link + "\n\n"
+            "Se non sei stato tu a richiederlo, ignora pure questa email: la tua password attuale resta valida."
+        )
+    elif row is not None and row["email"] is None:
+        # nessuna email registrata (es. account creato a mano dall'admin
+        # prima di questa funzione): resta il percorso di riserva, visibile
+        # nel pannello master
+        rid = uuid.uuid4().hex[:12]
+        db.execute(
+            "INSERT INTO password_reset_requests (id, company_id, company_name, requested_at, resolved) "
+            "VALUES (?,?,?,?,0)",
+            (rid, row["id"], row["name"], now_iso())
+        )
+        db.commit()
     return jsonify({"ok": True})
 
 
