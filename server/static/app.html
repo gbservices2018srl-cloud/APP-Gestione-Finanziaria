@@ -274,11 +274,13 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 
 
 
+
+
 var MONTHS = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 var MONTHS_SHORT = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 var FIXED_ITEMS_SEED = JSON.parse(document.getElementById('fixedItemsData').textContent);
 var LISTINO_DEFAULT = JSON.parse(document.getElementById('listinoData').textContent);
-var SITES_SEED = ["GB SRL","SARDARA","CABRAS","ELMAS","CAPOTERRA TO","POLIMED CAPOT","MARACALAGONIS","DOLIANOVA"];
+var SITES_SEED = ["SEDE 1"];
 var VARCATS_SEED = [
 {name:"Materiale di consumo", suppliers:true},
 {name:"Costi per dottori (collaboratori)", suppliers:true},
@@ -311,7 +313,10 @@ bankBalances: {},
 currentYear: new Date().getFullYear(),
 statsYears: [],
 companyLogo: null,
-ceColumns: []
+ceColumns: [],
+yearArchives: [],
+_yearEditBackup: null,
+_editingArchivedYear: null
 };
 var siteIds = [];
 SITES_SEED.forEach(function(name){
@@ -536,6 +541,9 @@ var out = parsed || {};
 if(!out.currentYear || typeof out.currentYear!=='number') out.currentYear = d.currentYear;
 if(out.companyLogo===undefined) out.companyLogo = null;
 if(!Array.isArray(out.ceColumns)) out.ceColumns = [];
+if(!Array.isArray(out.yearArchives)) out.yearArchives = [];
+if(out._yearEditBackup===undefined) out._yearEditBackup = null;
+if(out._editingArchivedYear===undefined) out._editingArchivedYear = null;
 ['fixed','varPct','ammPct','revenue','guadagnoPct','oneTimeNewUL'].forEach(function(k){ if(!out.budget[k]) out.budget[k]={}; });
 ['revenue','produzione','fixed','varCat','mesiOverride'].forEach(function(k){ if(!out.consuntivo[k]) out.consuntivo[k]={}; });
 ['tmv','conv','splitPVest','splitPVint','splitOVint','splitNC'].forEach(function(f){ if(!out.incassi[f]) out.incassi[f]={}; });
@@ -590,6 +598,9 @@ var loginError = '';
 var showForgotPassword = false;
 var showRegister = false;
 var registerSent = false;
+var registerStep = 'form';
+var pendingReg = {name:'', email:'', phone:'', password:''};
+var checkoutResult = null;
 var resetToken = null;
 var resetDone = false;
 var forgotPasswordSent = false;
@@ -1073,6 +1084,74 @@ function removeCEColumn(id){
 STATE.ceColumns = STATE.ceColumns.filter(function(c){return c.id!==id;});
 saveState();
 }
+function archiveCurrentYear(year){
+if(STATE._editingArchivedYear!==null) return false;
+var snapshot = {
+year: year,
+archivedAt: new Date().toISOString(),
+sites: JSON.parse(JSON.stringify(STATE.sites)),
+fixedCats: JSON.parse(JSON.stringify(STATE.fixedCats)),
+fixedItems: JSON.parse(JSON.stringify(STATE.fixedItems)),
+varCats: JSON.parse(JSON.stringify(STATE.varCats)),
+budget: JSON.parse(JSON.stringify(STATE.budget)),
+consuntivo: JSON.parse(JSON.stringify(STATE.consuntivo))
+};
+STATE.yearArchives = STATE.yearArchives.filter(function(a){ return a.year!==year; });
+STATE.yearArchives.push(snapshot);
+STATE.consuntivo = { revenue:{}, produzione:{}, fixed:{}, varCat:{}, mesiOverride:{} };
+STATE.sites.forEach(function(site){
+STATE.consuntivo.revenue[site.id] = MONTHS.map(function(){return 0;});
+STATE.consuntivo.produzione[site.id] = MONTHS.map(function(){return 0;});
+STATE.consuntivo.mesiOverride[site.id] = null;
+});
+STATE.fixedItems.forEach(function(it){
+STATE.consuntivo.fixed[it.id] = {};
+STATE.sites.forEach(function(site){ STATE.consuntivo.fixed[it.id][site.id] = newConsFixedEntry(); });
+});
+STATE.varCats.forEach(function(c){
+STATE.consuntivo.varCat[c.id] = {};
+STATE.sites.forEach(function(site){ STATE.consuntivo.varCat[c.id][site.id] = newConsVarEntry(c.suppliers && c.suppliers.length>0); });
+});
+saveState();
+return true;
+}
+function enterArchivedYearEdit(year){
+if(STATE._editingArchivedYear!==null) return false;
+var archive = STATE.yearArchives.find(function(a){ return a.year===year; });
+if(!archive) return false;
+STATE._yearEditBackup = {
+sites: STATE.sites, fixedCats: STATE.fixedCats, fixedItems: STATE.fixedItems,
+varCats: STATE.varCats, budget: STATE.budget, consuntivo: STATE.consuntivo
+};
+STATE.sites = JSON.parse(JSON.stringify(archive.sites));
+STATE.fixedCats = JSON.parse(JSON.stringify(archive.fixedCats));
+STATE.fixedItems = JSON.parse(JSON.stringify(archive.fixedItems));
+STATE.varCats = JSON.parse(JSON.stringify(archive.varCats));
+STATE.budget = JSON.parse(JSON.stringify(archive.budget));
+STATE.consuntivo = JSON.parse(JSON.stringify(archive.consuntivo));
+STATE._editingArchivedYear = year;
+saveState();
+return true;
+}
+function exitArchivedYearEdit(){
+if(STATE._editingArchivedYear===null || !STATE._yearEditBackup) return false;
+var year = STATE._editingArchivedYear;
+var idx = STATE.yearArchives.findIndex(function(a){ return a.year===year; });
+var updatedSnapshot = {
+year: year,
+archivedAt: new Date().toISOString(),
+sites: STATE.sites, fixedCats: STATE.fixedCats, fixedItems: STATE.fixedItems,
+varCats: STATE.varCats, budget: STATE.budget, consuntivo: STATE.consuntivo
+};
+if(idx!==-1) STATE.yearArchives[idx] = updatedSnapshot; else STATE.yearArchives.push(updatedSnapshot);
+var backup = STATE._yearEditBackup;
+STATE.sites = backup.sites; STATE.fixedCats = backup.fixedCats; STATE.fixedItems = backup.fixedItems;
+STATE.varCats = backup.varCats; STATE.budget = backup.budget; STATE.consuntivo = backup.consuntivo;
+STATE._yearEditBackup = null;
+STATE._editingArchivedYear = null;
+saveState();
+return true;
+}
 var PAGES = [
 {id:'dashboard', label:'Riepilogo', icon:'&#9679;'},
 {id:'consuntivo', label:'Consuntivo mensile', icon:'&#128197;'},
@@ -1141,12 +1220,32 @@ if(resetToken){
 renderResetPasswordScreen(main);
 return;
 }
+if(checkoutResult && !isLoggedIn){
+renderCheckoutResultScreen(main);
+return;
+}
 if(!isLoggedIn){
 renderLoginScreen(main);
 return;
 }
 if(currentBudgetSite===null || (currentBudgetSite!=='TOTAL' && !findSite(currentBudgetSite))) currentBudgetSite = STATE.sites.length ? STATE.sites[0].id : null;
 if(currentIncassiSite===null || (currentIncassiSite!=='TOTAL' && !findSite(currentIncassiSite))) currentIncassiSite = STATE.sites.length ? STATE.sites[0].id : null;
+if(STATE._editingArchivedYear!==null){
+var yearBanner = el('div',null,'');
+yearBanner.style.cssText = 'background:var(--red);color:#fff;padding:12px 20px;border-radius:10px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;font-weight:700;';
+var bannerText = el('span',null,'&#9888;&#65039; Stai correggendo l\u2019anno archiviato '+STATE._editingArchivedYear+' &mdash; NON \u00e8 l\u2019anno corrente.');
+yearBanner.appendChild(bannerText);
+var exitYearBtn = document.createElement('button');
+exitYearBtn.textContent = 'Salva e torna all\u2019anno corrente';
+exitYearBtn.style.cssText = 'background:#fff;color:var(--red);border:none;padding:8px 16px;border-radius:7px;font-weight:700;cursor:pointer;';
+exitYearBtn.onclick = function(){
+exitArchivedYearEdit();
+flashStatus('Anno '+STATE._editingArchivedYear+' salvato, tornato all\u2019anno corrente');
+render();
+};
+yearBanner.appendChild(exitYearBtn);
+main.appendChild(yearBanner);
+}
 if(isPageLocked(currentPage)){
 renderLockedPage(main);
 return;
@@ -1194,6 +1293,27 @@ reader.onerror = function(){ callback(null); };
 reader.readAsDataURL(file);
 }
 var RENDERERS = {};
+function renderCheckoutResultScreen(main){
+var wrap = el('div','auth-wrap');
+var box = el('div','auth-box');
+if(checkoutResult==='success'){
+box.appendChild(el('h1','pagetitle','Pagamento ricevuto'));
+box.appendChild(el('p','pagesub','Stiamo attivando il tuo account: richiede di solito pochi secondi. Prova ad accedere; se dice ancora "in attesa", aspetta un momento e riprova.'));
+} else {
+box.appendChild(el('h1','pagetitle','Pagamento annullato'));
+box.appendChild(el('p','pagesub','Nessun addebito effettuato. Puoi riprovare quando vuoi dalla schermata di accesso.'));
+}
+var goLoginBtn2 = el('button','btn','Vai all\u2019accesso');
+goLoginBtn2.onclick = function(){
+checkoutResult = null;
+try{ window.history.replaceState({}, '', window.location.pathname); }catch(e){}
+render();
+};
+box.appendChild(goLoginBtn2);
+wrap.appendChild(box);
+main.appendChild(wrap);
+}
+
 function renderResetPasswordScreen(main){
 var wrap = el('div','auth-wrap');
 var box = el('div','auth-box');
@@ -1239,41 +1359,85 @@ main.appendChild(wrap);
 function renderRegisterScreen(main){
 var wrap = el('div','auth-wrap');
 var box = el('div','auth-box');
-box.appendChild(el('h1','pagetitle','Richiedi un account'));
 if(registerSent){
+box.appendChild(el('h1','pagetitle','Richiedi un account'));
 box.appendChild(el('p','pagesub','Richiesta inviata! Riceverai una email quando l\u2019account sar\u00e0 attivato.'));
 var backBtn2 = el('button','btn secondary','Torna all\u2019accesso');
-backBtn2.onclick = function(){ showRegister=false; registerSent=false; loginError=''; render(); };
+backBtn2.onclick = function(){ showRegister=false; registerSent=false; registerStep='form'; loginError=''; render(); };
 box.appendChild(backBtn2);
 wrap.appendChild(box); main.appendChild(wrap);
 return;
 }
-box.appendChild(el('p','pagesub','Compila i dati della tua azienda: la richiesta verr\u00e0 esaminata prima dell\u2019attivazione.'));
+if(registerStep==='planChoice'){
+box.appendChild(el('h1','pagetitle','Scegli il piano'));
+box.appendChild(el('p','pagesub','Puoi cambiare idea in qualsiasi momento contattandoci.'));
+if(loginError){ box.appendChild(el('div','notebox', loginError)); }
+var freeBox = el('div','card');
+freeBox.appendChild(el('h2',null,'Gratuito'));
+freeBox.appendChild(el('p',null,'Riepilogo, Consuntivo mensile e Conto economico. Le altre funzioni restano visibili ma bloccate.'));
+var freeBtn = el('button','btn secondary','Scegli Gratuito');
+freeBtn.onclick = async function(){
+loginError='';
+freeBtn.disabled = true; freeBtn.textContent='Un momento...';
+var r = await apiSend('/api/company/register','POST',{name:pendingReg.name, email:pendingReg.email, phone:pendingReg.phone, password:pendingReg.password});
+if(r.ok){ registerSent = true; render(); }
+else { loginError = (r.data&&r.data.error)||'Errore, riprova.'; registerStep='form'; render(); }
+};
+freeBox.appendChild(freeBtn);
+box.appendChild(freeBox);
+var paidBox = el('div','card');
+paidBox.appendChild(el('h2',null,'Completo \u2014 29 &euro;/mese'));
+paidBox.appendChild(el('p',null,'Tutte le funzioni sbloccate. Disdicibile quando vuoi, senza vincoli.'));
+var paidBtn = el('button','btn','Scegli il piano completo');
+paidBtn.onclick = async function(){
+loginError='';
+paidBtn.disabled = true; paidBtn.textContent='Un momento...';
+var r = await apiSend('/api/company/register','POST',{name:pendingReg.name, email:pendingReg.email, phone:pendingReg.phone, password:pendingReg.password});
+if(!r.ok){ loginError = (r.data&&r.data.error)||'Errore, riprova.'; registerStep='form'; render(); return; }
+var r2 = await apiSend('/api/company/create-checkout-session','POST',{companyId:r.data.id});
+if(r2.ok && r2.data && r2.data.url){ window.location.href = r2.data.url; }
+else { loginError = (r2.data&&r2.data.error)||'Errore nell\u2019avvio del pagamento.'; paidBtn.disabled=false; paidBtn.textContent='Scegli il piano completo'; render(); }
+};
+paidBox.appendChild(paidBtn);
+box.appendChild(paidBox);
+var backBtn3 = el('button','btn secondary','Indietro');
+backBtn3.onclick = function(){ registerStep='form'; loginError=''; render(); };
+box.appendChild(backBtn3);
+wrap.appendChild(box); main.appendChild(wrap);
+return;
+}
+box.appendChild(el('h1','pagetitle','Richiedi un account'));
+box.appendChild(el('p','pagesub','Compila i dati della tua azienda: al passo successivo scegli il piano.'));
 var rNameRow = el('div','input-row');
 rNameRow.appendChild(el('label',null,'Nome azienda'));
-var rNameInp = document.createElement('input'); rNameInp.type='text'; rNameInp.style.width='220px';
+var rNameInp = document.createElement('input'); rNameInp.type='text'; rNameInp.style.width='220px'; rNameInp.value = pendingReg.name;
 rNameRow.appendChild(rNameInp);
 box.appendChild(rNameRow);
 var rEmailRow = el('div','input-row');
 rEmailRow.appendChild(el('label',null,'Email'));
-var rEmailInp = document.createElement('input'); rEmailInp.type='email'; rEmailInp.style.width='220px';
+var rEmailInp = document.createElement('input'); rEmailInp.type='email'; rEmailInp.style.width='220px'; rEmailInp.value = pendingReg.email;
 rEmailRow.appendChild(rEmailInp);
 box.appendChild(rEmailRow);
+var rPhoneRow = el('div','input-row');
+rPhoneRow.appendChild(el('label',null,'Telefono (facoltativo)'));
+var rPhoneInp = document.createElement('input'); rPhoneInp.type='tel'; rPhoneInp.style.width='220px'; rPhoneInp.value = pendingReg.phone;
+rPhoneRow.appendChild(rPhoneInp);
+box.appendChild(rPhoneRow);
 var rPwRow = el('div','input-row');
 rPwRow.appendChild(el('label',null,'Password'));
 var rPwInp = document.createElement('input'); rPwInp.type='password'; rPwInp.style.width='220px';
 rPwRow.appendChild(rPwInp);
 box.appendChild(rPwRow);
 if(loginError){ box.appendChild(el('div','notebox', loginError)); }
-var registerBtn = el('button','btn','Invia richiesta');
-registerBtn.onclick = async function(){
+var registerBtn = el('button','btn','Avanti');
+registerBtn.onclick = function(){
 loginError='';
 if(!rNameInp.value.trim()){ loginError='Inserisci il nome della tua azienda.'; render(); return; }
 if(!rEmailInp.value.trim() || rEmailInp.value.indexOf('@')===-1){ loginError='Inserisci un\u2019email valida.'; render(); return; }
 if(rPwInp.value.length<4){ loginError='La password deve avere almeno 4 caratteri.'; render(); return; }
-var r = await apiSend('/api/company/register','POST',{name:rNameInp.value.trim(), email:rEmailInp.value.trim(), password:rPwInp.value});
-if(r.ok){ registerSent = true; render(); }
-else { loginError = (r.data&&r.data.error)||'Errore, riprova.'; render(); }
+pendingReg = {name:rNameInp.value.trim(), email:rEmailInp.value.trim(), phone:rPhoneInp.value.trim(), password:rPwInp.value};
+registerStep = 'planChoice';
+render();
 };
 box.appendChild(registerBtn);
 var backBtn = el('button','btn secondary','Torna all\u2019accesso');
@@ -1351,7 +1515,7 @@ box.appendChild(forgotLink);
 var registerLink = document.createElement('div');
 registerLink.style.cssText = 'margin-top:8px;text-align:center;';
 registerLink.innerHTML = '<a href="#" style="font-size:12.5px;color:var(--teal);">Non hai un account? Richiedine uno</a>';
-registerLink.querySelector('a').onclick = function(ev){ ev.preventDefault(); showRegister=true; loginError=''; render(); };
+registerLink.querySelector('a').onclick = function(ev){ ev.preventDefault(); showRegister=true; registerStep='form'; pendingReg={name:'',email:'',phone:'',password:''}; loginError=''; render(); };
 box.appendChild(registerLink);
 wrap.appendChild(box);
 main.appendChild(wrap);
@@ -2927,6 +3091,43 @@ main.appendChild(resetCard);
 RENDERERS.dati = function(main){
 main.appendChild(el('h1','pagetitle','Backup dei dati'));
 main.appendChild(el('p','pagesub','I dati della tua azienda vengono salvati sul server automaticamente. Usa questa pagina per un backup di sicurezza in pi\u00f9, da tenere sul tuo computer.'));
+var yearCard = el('div','card');
+yearCard.appendChild(el('h2',null,'Chiusura anno'));
+yearCard.appendChild(el('div','help-tip','Chiudere l\u2019anno archivia sedi, voci di costo, budget e Consuntivo mensile cos\u00ec come sono ora, poi azzera SOLO il Consuntivo per ripartire puliti col nuovo anno. La struttura di Budget resta com\u2019\u00e8, come punto di partenza. Puoi sempre riaprire un anno archiviato per correggerlo.'));
+if(STATE._editingArchivedYear!==null){
+yearCard.appendChild(el('div','notebox','Stai gi\u00e0 correggendo l\u2019anno '+STATE._editingArchivedYear+': torna all\u2019anno corrente (bottone in alto) prima di chiudere un nuovo anno.'));
+} else {
+var closeYearBtn = el('button','btn danger','Chiudi anno '+STATE.currentYear+' e inizia il '+(STATE.currentYear+1));
+closeYearBtn.onclick = function(){
+showConfirmModal('Chiudere l\u2019anno '+STATE.currentYear+'? Il Consuntivo mensile verr\u00e0 archiviato e poi azzerato per il nuovo anno. La struttura di Budget (sedi, voci di costo) resta invariata. Potrai sempre riaprire '+STATE.currentYear+' in un secondo momento per correggerlo.', function(){
+var year = STATE.currentYear;
+archiveCurrentYear(year);
+STATE.currentYear = year+1;
+saveState();
+flashStatus('Anno '+year+' chiuso e archiviato');
+render();
+});
+};
+yearCard.appendChild(closeYearBtn);
+}
+if(STATE.yearArchives.length>0){
+yearCard.appendChild(el('h3',null,'Anni archiviati'));
+STATE.yearArchives.slice().sort(function(a,b){return b.year-a.year;}).forEach(function(a){
+var row = el('div','input-row');
+row.appendChild(el('span',null,'<b>'+a.year+'</b> &mdash; archiviato il '+(a.archivedAt||'').slice(0,10)));
+var editYearBtn = el('button','small-btn', STATE._editingArchivedYear===a.year ? 'In correzione ora' : 'Correggi');
+editYearBtn.disabled = STATE._editingArchivedYear!==null;
+editYearBtn.onclick = function(){
+enterArchivedYearEdit(a.year);
+flashStatus('Ora stai correggendo l\u2019anno '+a.year);
+currentPage = 'consuntivo';
+render();
+};
+row.appendChild(editYearBtn);
+yearCard.appendChild(row);
+});
+}
+main.appendChild(yearCard);
 var pwCard = el('div','card');
 pwCard.appendChild(el('h2',null,'Cambia password'));
 pwCard.appendChild(el('div','help-tip','Per motivi di sicurezza devi confermare la password attuale prima di impostarne una nuova.'));
@@ -3003,14 +3204,14 @@ logoCard.appendChild(logoBtnRow);
 main.appendChild(logoCard);
 var restoreCard = el('div','card');
 restoreCard.appendChild(el('h2',null,'Ripristino voci originali'));
-restoreCard.appendChild(el('div','help-tip','Ricrea le 8 sedi, i macro-gruppi e le voci di costo fisso, le categorie variabili e il listino prezzi cos\u00ec come definiti nel file Excel originale caricato all\u2019inizio. Utile se la struttura \u00e8 stata cancellata per errore. I valori numerici partiranno da zero: i numeri che avevi inserito non possono essere recuperati con questa funzione.'));
+restoreCard.appendChild(el('div','help-tip','Ricrea una sola sede ("SEDE 1"), i macro-gruppi e le voci di costo fisso, le categorie variabili e il listino prezzi di partenza. Utile se la struttura \u00e8 stata cancellata per errore. I valori numerici partiranno da zero: i numeri che avevi inserito non possono essere recuperati con questa funzione.'));
 var restoreBtn = el('button','btn secondary','&#8635; Ripristino voci originali');
 restoreBtn.onclick = function(){
-showConfirmCodeModal('Questo sovrascrive la struttura attuale con quella originale. Digita il PIN di ripristino di fabbrica per confermare.', '12345', function(){
+showConfirmCodeModal('Questo sovrascrive la struttura attuale con quella di partenza (una sola sede). Digita il PIN di ripristino di fabbrica per confermare.', '12345', function(){
 STATE = defaultState();
 saveState();
 render();
-flashStatus('Struttura originale ripristinata: 8 sedi, macro-gruppi, voci e listino sono di nuovo qui');
+flashStatus('Struttura di partenza ripristinata: SEDE 1, macro-gruppi, voci e listino sono di nuovo qui');
 });
 };
 restoreCard.appendChild(restoreBtn);
@@ -3039,33 +3240,8 @@ catch(e){ flashStatus('File non valido: impossibile leggere il backup'); }
 reader.readAsText(f);
 });
 btnRow.appendChild(importLabel); btnRow.appendChild(fileInp);
-var resetBtn = el('button','btn danger','Azzera valori inseriti');
-var resetPanel = el('div','reset-panel');
-resetPanel.style.display = 'none';
-resetPanel.innerHTML =
-'<p style="margin:10px 0 6px;font-size:12.8px;color:var(--red);"><b>Attenzione:</b> questa operazione azzera tutti i numeri inseriti \u2014 fatturati, costi, importi mensili del consuntivo (incluso il valore produzione), parametri del previsionale incassi. <b>Non tocca</b> i conti correnti e gli anni archiviati in Statistiche storiche: quelli si azzerano separatamente da l\u00ec.</p>'+
-'<p style="margin:0 0 8px;font-size:12.8px;color:var(--green);"><b>Restano invariati:</b> sedi, macro-gruppi e voci di costo, categorie variabili e listino prezzi (nomi e struttura).</p>'+
-'<p style="margin:0 0 8px;font-size:12.3px;color:var(--text-soft);">Non si pu\u00f2 annullare. Scarica prima un backup se non sei sicuro.</p>'+
-'<div class="input-row"><label>Digita il PIN di conferma</label><input type="text" id="resetCodeInput" maxlength="4" style="width:80px;letter-spacing:.3em;text-align:center;" inputmode="numeric"></div>'+
-'<div class="btn-row"><button class="btn danger" id="resetConfirmBtn">Conferma azzeramento valori</button><button class="btn secondary" id="resetCancelBtn">Annulla</button></div>'+
-'<p id="resetError" style="color:var(--red);font-size:12px;display:none;">PIN errato.</p>';
-resetBtn.onclick = function(){ resetPanel.style.display = resetPanel.style.display==='none' ? 'block' : 'none'; };
-btnRow.appendChild(resetBtn);
 card.appendChild(btnRow);
-card.appendChild(resetPanel);
-resetPanel.querySelector('#resetCancelBtn').addEventListener('click', function(){ resetPanel.style.display='none'; resetPanel.querySelector('#resetError').style.display='none'; resetPanel.querySelector('#resetCodeInput').value=''; });
-resetPanel.querySelector('#resetConfirmBtn').addEventListener('click', function(){
-var code = resetPanel.querySelector('#resetCodeInput').value.trim();
-if(code === '0000'){
-clearAllValues();
-resetPanel.style.display='none';
-render();
-flashStatus('Valori azzerati: struttura, sedi e listino sono rimasti invariati');
-} else {
-resetPanel.querySelector('#resetError').style.display='block';
-}
-});
-card.appendChild(el('div','help-tip','Consiglio: scarica un backup ogni volta che aggiorni dati importanti.'));
+card.appendChild(el('div','help-tip','Consiglio: scarica un backup ogni volta che aggiorni dati importanti. Per ripartire con un anno nuovo mantenendo lo storico, usa "Chiudi anno" qui sopra invece di cancellare i dati a mano.'));
 main.appendChild(card);
 };
 var mobileMenuBtn = document.getElementById('mobileMenuBtn');
@@ -3075,9 +3251,12 @@ if(sidebarBackdropEl) sidebarBackdropEl.addEventListener('click', closeMobileMen
 try{
 var urlParams = new URLSearchParams(window.location.search);
 if(urlParams.get('reset')) resetToken = urlParams.get('reset');
+if(urlParams.get('checkout')) checkoutResult = urlParams.get('checkout');
 }catch(e){}
 startInactivityWatcher();
 bootApp();
+
+
 
 
 

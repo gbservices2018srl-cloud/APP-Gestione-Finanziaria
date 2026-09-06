@@ -46,6 +46,7 @@ pre.datajson{background:#1e2a30; color:#d7e6e4; padding:14px; border-radius:8px;
 <div id="app"></div>
 <script>
 
+
 async function apiGet(p){ var r = await fetch(p,{credentials:'include'}); var d=null; try{d=await r.json();}catch(e){} return {ok:r.ok,data:d}; }
 async function apiSend(p,m,b){ var r = await fetch(p,{method:m,credentials:'include',headers:{'Content-Type':'application/json'},body:b!==undefined?JSON.stringify(b):undefined}); var d=null; try{d=await r.json();}catch(e){} return {ok:r.ok,data:d}; }
 var view = 'loading';
@@ -146,14 +147,18 @@ var emailRow = el('div','input-row');
 emailRow.appendChild(el('label',null,'Email (facoltativa)'));
 var emailInp = document.createElement('input'); emailInp.type='email'; emailInp.placeholder='per notifiche e reset password'; emailRow.appendChild(emailInp);
 createCard.appendChild(emailRow);
+var phoneRow = el('div','input-row');
+phoneRow.appendChild(el('label',null,'Telefono (facoltativo)'));
+var phoneInp = document.createElement('input'); phoneInp.type='tel'; phoneInp.placeholder='es. 333 1234567'; phoneRow.appendChild(phoneInp);
+createCard.appendChild(phoneRow);
 if(errMsg) createCard.appendChild(el('div','notice err',errMsg));
 var createBtn = el('button','btn','+ Crea azienda');
 createBtn.onclick = async function(){
 errMsg='';
-var name = nameInp.value.trim(), pw = pwInp.value.trim(), email = emailInp.value.trim();
+var name = nameInp.value.trim(), pw = pwInp.value.trim(), email = emailInp.value.trim(), phone = phoneInp.value.trim();
 if(!name){ errMsg='Inserisci un nome.'; render(); return; }
 if(pw.length<4){ errMsg='Password di almeno 4 caratteri.'; render(); return; }
-var r = await apiSend('/api/admin/companies','POST',{name:name,password:pw,email:email||undefined});
+var r = await apiSend('/api/admin/companies','POST',{name:name,password:pw,email:email||undefined,phone:phone||undefined});
 if(!r.ok){ errMsg=(r.data&&r.data.error)||'Errore nella creazione.'; render(); return; }
 await loadCompanies(); render();
 };
@@ -220,13 +225,14 @@ if(approvedCompanies.length===0){
 listCard.appendChild(el('p',null,'Nessuna azienda attiva ancora.'));
 } else {
 var table = document.createElement('table');
-var thead = '<tr><th>Nome</th><th>Email</th><th>Piano</th><th>Stato</th><th>Scadenza</th><th>Creata il</th><th></th></tr>';
+var thead = '<tr><th>Nome</th><th>Email</th><th>Telefono</th><th>Piano</th><th>Stato</th><th>Scadenza</th><th>Creata il</th><th></th></tr>';
 var tbody = '';
 approvedCompanies.forEach(function(c,idx){
 var statoLabel = c.suspended ? '<span style="color:var(--red);font-weight:700;">Sospeso</span>' : '<span style="color:var(--green,#3f8f5c);font-weight:700;">Attivo</span>';
 var scadenzaLabel = c.expires_at ? c.expires_at : '<span style="color:var(--text-soft,#888);">nessuna</span>';
 var emailLabel = c.email ? c.email.replace(/</g,'&lt;') : '<span style="color:var(--text-soft,#888);">nessuna</span>';
-tbody += '<tr data-idx="'+idx+'"><td>'+c.name.replace(/</g,'&lt;')+'</td><td>'+emailLabel+'</td><td>'+(c.plan==='pro'?'PRO':'Free')+'</td><td>'+statoLabel+'</td><td>'+scadenzaLabel+'</td><td>'+(c.created_at||'').slice(0,10)+'</td><td class="actions-'+idx+'"></td></tr>';
+var phoneLabel = c.phone ? c.phone.replace(/</g,'&lt;') : '<span style="color:var(--text-soft,#888);">nessuno</span>';
+tbody += '<tr data-idx="'+idx+'"><td>'+c.name.replace(/</g,'&lt;')+'</td><td>'+emailLabel+'</td><td>'+phoneLabel+'</td><td>'+(c.plan==='pro'?'PRO':'Free')+'</td><td>'+statoLabel+'</td><td>'+scadenzaLabel+'</td><td>'+(c.created_at||'').slice(0,10)+'</td><td class="actions-'+idx+'"></td></tr>';
 });
 table.innerHTML = '<thead>'+thead+'</thead><tbody>'+tbody+'</tbody>';
 listCard.appendChild(table);
@@ -284,13 +290,21 @@ if(newEmail && newEmail.indexOf('@')===-1){ alert('Indirizzo email non valido.')
 var r = await apiSend('/api/admin/companies/'+c.id+'/email','PUT',{email:newEmail});
 if(r.ok){ await loadCompanies(); render(); }
 };
+var phoneBtn = el('button','small-btn', c.phone ? 'Modifica telefono' : 'Imposta telefono');
+phoneBtn.onclick = async function(){
+var newPhone = prompt('Telefono per "'+c.name+'":', c.phone||'');
+if(newPhone===null) return;
+newPhone = newPhone.trim();
+var r = await apiSend('/api/admin/companies/'+c.id+'/phone','PUT',{phone:newPhone});
+if(r.ok){ await loadCompanies(); render(); }
+};
 var delBtn = el('button','small-btn danger','Elimina');
 delBtn.onclick = async function(){
 if(!confirm('Eliminare definitivamente "'+c.name+'" e tutti i suoi dati? Non si pu\u00f2 annullare.')) return;
 var r = await apiSend('/api/admin/companies/'+c.id,'DELETE');
 if(r.ok){ await loadCompanies(); render(); }
 };
-[viewBtn,renameBtnEl,pwBtn,suspendBtn,planBtn,expiryBtn,emailBtn,delBtn].forEach(function(b){ cell.appendChild(b); });
+[viewBtn,renameBtnEl,pwBtn,suspendBtn,planBtn,expiryBtn,emailBtn,phoneBtn,delBtn].forEach(function(b){ cell.appendChild(b); });
 });
 }
 frag.appendChild(listCard);
@@ -323,6 +337,7 @@ frag.appendChild(dataCard);
 return frag;
 }
 boot();
+
 
 </script>
 </body>
