@@ -23,6 +23,10 @@ import smtplib
 import datetime
 from email.mime.text import MIMEText
 from flask import Flask, request, jsonify, session, g, send_from_directory
+try:
+    import stripe
+except ImportError:
+    stripe = None
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR", BASE_DIR)
@@ -37,6 +41,9 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=datetime.timedelta(minutes=10),
     SESSION_REFRESH_EACH_REQUEST=True,
 )
+
+if stripe is not None:
+    stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -76,7 +83,10 @@ def init_db():
             expires_at TEXT,
             plan TEXT NOT NULL DEFAULT 'free',
             email TEXT,
-            approved INTEGER NOT NULL DEFAULT 1
+            approved INTEGER NOT NULL DEFAULT 1,
+            phone TEXT,
+            stripe_customer_id TEXT,
+            stripe_subscription_id TEXT
         )"""
     )
     # migrazione sicura: se il database esisteva gia' (creato prima di questa
@@ -94,6 +104,12 @@ def init_db():
         # le aziende gia' esistenti (create prima di questa funzione) sono
         # gia' attive: non deve servire una nuova approvazione per loro
         db.execute("ALTER TABLE companies ADD COLUMN approved INTEGER NOT NULL DEFAULT 1")
+    if "phone" not in existing_cols:
+        db.execute("ALTER TABLE companies ADD COLUMN phone TEXT")
+    if "stripe_customer_id" not in existing_cols:
+        db.execute("ALTER TABLE companies ADD COLUMN stripe_customer_id TEXT")
+    if "stripe_subscription_id" not in existing_cols:
+        db.execute("ALTER TABLE companies ADD COLUMN stripe_subscription_id TEXT")
     db.execute(
         """CREATE TABLE IF NOT EXISTS password_reset_requests (
             id TEXT PRIMARY KEY,
@@ -300,7 +316,7 @@ def admin_list_companies():
         return json_error("Non autorizzato.", 401)
     db = get_db()
     rows = db.execute(
-        "SELECT id, name, email, created_at, suspended, expires_at, plan, approved FROM companies ORDER BY created_at DESC"
+        "SELECT id, name, email, phone, created_at, suspended, expires_at, plan, approved FROM companies ORDER BY created_at DESC"
     ).fetchall()
     return jsonify({"companies": [dict(r) for r in rows]})
 
@@ -313,6 +329,7 @@ def admin_create_company():
     name = (body.get("name") or "").strip()
     password = (body.get("password") or "").strip()
     email = (body.get("email") or "").strip() or None
+    phone = (body.get("phone") or "").strip() or None
     if not name:
         return json_error("Il nome dell'azienda e' obbligatorio.")
     if len(password) < 4:
@@ -321,12 +338,24 @@ def admin_create_company():
     cid = uuid.uuid4().hex[:12]
     # creata direttamente dal master: gia' approvata, non serve revisione
     db.execute(
-        "INSERT INTO companies (id, name, email, password_hash, created_at, data, suspended, expires_at, plan, approved) "
-        "VALUES (?,?,?,?,?,?,0,NULL,'free',1)",
-        (cid, name, email, generate_password_hash(password), now_iso(), "{}")
+        "INSERT INTO companies (id, name, email, phone, password_hash, created_at, data, suspended, expires_at, plan, approved) "
+        "VALUES (?,?,?,?,?,?,?,0,NULL,'free',1)",
+        (cid, name, email, phone, generate_password_hash(password), now_iso(), "{}")
     )
     db.commit()
     return jsonify({"id": cid, "name": name})
+
+
+@app.route("/api/admin/companies/<cid>/phone", methods=["PUT"])
+def admin_set_company_phone(cid):
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    body = request.get_json(force=True, silent=True) or {}
+    phone = (body.get("phone") or "").strip() or None
+    db = get_db()
+    db.execute("UPDATE companies SET phone=? WHERE id=?", (phone, cid))
+    db.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/admin/companies/<cid>/approve", methods=["PUT"])
@@ -515,6 +544,7 @@ def company_register():
     body = request.get_json(force=True, silent=True) or {}
     name = (body.get("name") or "").strip()
     email = (body.get("email") or "").strip()
+    phone = (body.get("phone") or "").strip()
     password = (body.get("password") or "").strip()
     if not name:
         return json_error("Inserisci il nome della tua azienda.")
@@ -528,9 +558,9 @@ def company_register():
         return json_error("Esiste gia' un account con questo nome azienda. Scegline un altro o contatta l'assistenza.")
     cid = uuid.uuid4().hex[:12]
     db.execute(
-        "INSERT INTO companies (id, name, email, password_hash, created_at, data, suspended, expires_at, plan, approved) "
-        "VALUES (?,?,?,?,?,?,0,NULL,'free',0)",
-        (cid, name, email, generate_password_hash(password), now_iso(), "{}")
+        "INSERT INTO companies (id, name, email, phone, password_hash, created_at, data, suspended, expires_at, plan, approved) "
+        "VALUES (?,?,?,?,?,?,?,0,NULL,'free',0)",
+        (cid, name, email, phone or None, generate_password_hash(password), now_iso(), "{}")
     )
     db.commit()
     # riepilogo al cliente, mandato SOLO ora: e' l'unico momento in cui il
@@ -541,17 +571,110 @@ def company_register():
         "Ciao,\nabbiamo ricevuto la tua richiesta di accesso. Ecco il riepilogo dei dati che hai inserito:\n\n"
         "Nome azienda: " + name + "\n"
         "Email: " + email + "\n"
-        "Password scelta: " + password + "\n\n"
+        + ("Telefono: " + phone + "\n" if phone else "")
+        + "Password scelta: " + password + "\n\n"
         "Conservali in un posto sicuro: sono le credenziali che userai per accedere.\n"
         "La richiesta e' ora in attesa di approvazione: riceverai un'altra email quando l'account sara' attivo."
     )
     send_email_safe(
         get_admin_notify_email(),
         "Nuova richiesta di accesso: " + name,
-        "L'azienda \"" + name + "\" (" + email + ") ha richiesto un account.\n"
+        "L'azienda \"" + name + "\" (" + email + (", tel. " + phone if phone else "") + ") ha richiesto un account.\n"
         "Vai sul pannello master per approvarla, prima che possa accedere."
     )
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "id": cid})
+
+
+@app.route("/api/company/create-checkout-session", methods=["POST"])
+def create_checkout_session():
+    body = request.get_json(force=True, silent=True) or {}
+    company_id = (body.get("companyId") or "").strip()
+    if not company_id:
+        return json_error("Richiesta non valida.")
+    if stripe is None or not os.environ.get("STRIPE_SECRET_KEY") or not os.environ.get("STRIPE_PRICE_ID"):
+        return json_error("I pagamenti non sono ancora configurati sul server. Contatta l'amministratore.", 500)
+    db = get_db()
+    row = db.execute("SELECT id, name, email FROM companies WHERE id=?", (company_id,)).fetchone()
+    if row is None:
+        return json_error("Azienda non trovata.", 404)
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            mode="subscription",
+            line_items=[{"price": os.environ.get("STRIPE_PRICE_ID"), "quantity": 1}],
+            customer_email=row["email"] or None,
+            client_reference_id=row["id"],
+            subscription_data={"metadata": {"company_id": row["id"]}},
+            metadata={"company_id": row["id"]},
+            success_url=request.host_url.rstrip("/") + "/?checkout=success",
+            cancel_url=request.host_url.rstrip("/") + "/?checkout=cancel",
+        )
+        return jsonify({"url": checkout_session.url})
+    except Exception as e:
+        app.logger.error("Errore nella creazione della sessione Stripe: %s", e)
+        return json_error("Errore nell'avvio del pagamento. Riprova tra poco.", 500)
+
+
+@app.route("/api/stripe/webhook", methods=["POST"])
+def stripe_webhook():
+    if stripe is None:
+        return json_error("Stripe non disponibile.", 500)
+    payload = request.get_data()
+    sig_header = request.headers.get("Stripe-Signature", "")
+    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+    except Exception as e:
+        app.logger.warning("Webhook Stripe non valido: %s", e)
+        return json_error("Webhook non valido.", 400)
+
+    etype = event.get("type")
+    obj = event.get("data", {}).get("object", {})
+    db = get_db()
+
+    if etype == "checkout.session.completed":
+        company_id = obj.get("client_reference_id") or (obj.get("metadata") or {}).get("company_id")
+        customer_id = obj.get("customer")
+        subscription_id = obj.get("subscription")
+        if company_id:
+            row = db.execute("SELECT name, email FROM companies WHERE id=?", (company_id,)).fetchone()
+            db.execute(
+                "UPDATE companies SET plan='pro', approved=1, suspended=0, expires_at=NULL, "
+                "stripe_customer_id=?, stripe_subscription_id=? WHERE id=?",
+                (customer_id, subscription_id, company_id)
+            )
+            db.commit()
+            if row and row["email"]:
+                send_email_safe(
+                    row["email"],
+                    "Abbonamento attivato",
+                    "Ciao,\nil pagamento e' andato a buon fine: il tuo account \"" + row["name"] + "\" "
+                    "e' ora attivo con il piano completo (29 EUR/mese, disdicibile quando vuoi). "
+                    "Puoi accedere da subito."
+                )
+            send_email_safe(
+                get_admin_notify_email(),
+                "Nuovo abbonamento pagante",
+                "L'azienda \"" + (row["name"] if row else company_id) + "\" ha completato il pagamento "
+                "ed e' stata attivata automaticamente sul piano Pro."
+            )
+
+    elif etype == "customer.subscription.deleted":
+        subscription_id = obj.get("id")
+        row = db.execute(
+            "SELECT id, name, email FROM companies WHERE stripe_subscription_id=?", (subscription_id,)
+        ).fetchone()
+        if row:
+            db.execute("UPDATE companies SET plan='free' WHERE id=?", (row["id"],))
+            db.commit()
+            if row["email"]:
+                send_email_safe(
+                    row["email"],
+                    "Abbonamento terminato",
+                    "Ciao,\nil tuo abbonamento al piano completo per \"" + row["name"] + "\" e' terminato. "
+                    "Il tuo account resta attivo con il piano gratuito. Puoi riattivare l'abbonamento quando vuoi."
+                )
+
+    return jsonify({"received": True})
 
 
 @app.route("/api/company/logout", methods=["POST"])
