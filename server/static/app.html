@@ -276,6 +276,7 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 
 
 
+
 var MONTHS = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 var MONTHS_SHORT = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 var FIXED_ITEMS_SEED = JSON.parse(document.getElementById('fixedItemsData').textContent);
@@ -1499,21 +1500,27 @@ var wrap = el('div','auth-wrap');
 var box = el('div','auth-box');
 if(showForgotPassword){
 box.appendChild(el('h1','pagetitle','Password dimenticata'));
-box.appendChild(el('p','pagesub','Scrivi il nome della tua azienda: la richiesta arriver\u00e0 a chi gestisce il servizio, che ti invier\u00e0 una nuova password.'));
+box.appendChild(el('p','pagesub','Scrivi il nome della tua azienda e l\u2019email con cui ti sei registrato: se corrispondono, ti mandiamo un link per reimpostare la password.'));
 var fpNameRow = el('div','input-row');
 fpNameRow.appendChild(el('label',null,'Nome azienda'));
 var fpNameInp = document.createElement('input'); fpNameInp.type='text'; fpNameInp.style.width='220px';
 fpNameRow.appendChild(fpNameInp);
 box.appendChild(fpNameRow);
+var fpEmailRow = el('div','input-row');
+fpEmailRow.appendChild(el('label',null,'Email di registrazione'));
+var fpEmailInp = document.createElement('input'); fpEmailInp.type='email'; fpEmailInp.style.width='220px';
+fpEmailRow.appendChild(fpEmailInp);
+box.appendChild(fpEmailRow);
 if(loginError){ box.appendChild(el('div','notebox', loginError)); }
 if(forgotPasswordSent){
-box.appendChild(el('div','notebox','Richiesta inviata. Verrai contattato con la nuova password.'));
+box.appendChild(el('div','notebox','Se i dati inseriti corrispondono a un account esistente, riceverai a breve un\u2019email con le istruzioni per reimpostare la password.'));
 } else {
 var sendBtn = el('button','btn','Invia richiesta');
 sendBtn.onclick = async function(){
 loginError='';
 if(!fpNameInp.value.trim()){ loginError='Inserisci il nome della tua azienda.'; render(); return; }
-var r = await apiSend('/api/company/forgot-password','POST',{name:fpNameInp.value.trim()});
+if(!fpEmailInp.value.trim()){ loginError='Inserisci l\u2019email con cui ti sei registrato.'; render(); return; }
+var r = await apiSend('/api/company/forgot-password','POST',{name:fpNameInp.value.trim(), email:fpEmailInp.value.trim()});
 if(r.ok){ forgotPasswordSent = true; render(); }
 else { loginError = (r.data && r.data.error) || 'Errore, riprova.'; render(); }
 };
@@ -3319,6 +3326,7 @@ if(urlParams.get('checkout')) checkoutResult = urlParams.get('checkout');
 }catch(e){}
 startInactivityWatcher();
 bootApp();
+
 
 
 
