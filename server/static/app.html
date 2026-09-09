@@ -277,6 +277,7 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 
 
 
+
 var MONTHS = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 var MONTHS_SHORT = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 var FIXED_ITEMS_SEED = JSON.parse(document.getElementById('fixedItemsData').textContent);
@@ -1207,7 +1208,7 @@ var PAGES = [
 {id:'listino', label:'Listino & margini', icon:'&#129513;'},
 {id:'contoeconomico', label:'Conto economico', icon:'&#128203;'},
 {id:'statistiche', label:'Statistiche storiche', icon:'&#128202;'},
-{id:'dati', label:'Backup dati', icon:'&#128190;'}
+{id:'dati', label:'Impostazioni e Backup', icon:'&#128190;'}
 ];
 var currentPage = 'dashboard';
 var currentBudgetSite = null;
@@ -3160,8 +3161,47 @@ resetCard.appendChild(resetBtn);
 main.appendChild(resetCard);
 };
 RENDERERS.dati = function(main){
-main.appendChild(el('h1','pagetitle','Backup dei dati'));
-main.appendChild(el('p','pagesub','I dati della tua azienda vengono salvati sul server automaticamente. Usa questa pagina per un backup di sicurezza in pi\u00f9, da tenere sul tuo computer.'));
+main.appendChild(el('h1','pagetitle','Impostazioni e Backup'));
+main.appendChild(el('p','pagesub','Gestisci il tuo abbonamento, l\u2019account e i dati della tua azienda.'));
+var planCard = el('div','card');
+planCard.style.cssText = 'background:linear-gradient(135deg, var(--navy), #4a3060); color:#fff;';
+var planHeader = el('div',null,'');
+planHeader.style.cssText = 'display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;';
+var planInfo = el('div',null,'');
+planInfo.appendChild(el('div',null,'<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.75;margin-bottom:4px;">Il tuo piano</div><div style="font-family:var(--font-brand);font-weight:800;font-size:22px;">'+(companyPlan==='pro' ? 'Completo &mdash; 29 &euro;/mese' : 'Gratuito')+'</div>'));
+planHeader.appendChild(planInfo);
+var planActionWrap = el('div',null,'');
+if(companyPlan==='pro'){
+var cancelBtn = document.createElement('button');
+cancelBtn.textContent = 'Disdici abbonamento';
+cancelBtn.style.cssText = 'background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.4);padding:10px 18px;border-radius:8px;font-weight:700;cursor:pointer;';
+cancelBtn.onclick = function(){
+showConfirmModal('Disdire l\u2019abbonamento al piano completo? Rester\u00e0 attivo fino alla fine del periodo gi\u00e0 pagato, poi l\u2019account torner\u00e0 automaticamente al piano gratuito. Puoi riattivarlo quando vuoi.', async function(){
+cancelBtn.disabled = true; cancelBtn.textContent = 'Un momento...';
+var r = await apiSend('/api/company/cancel-subscription','POST');
+if(r.ok){ flashStatus('Disdetta registrata: resterai sul piano completo fino a fine periodo'); }
+else { flashStatus((r.data&&r.data.error)||'Errore nella disdetta, riprova'); cancelBtn.disabled=false; cancelBtn.textContent='Disdici abbonamento'; }
+});
+};
+planActionWrap.appendChild(cancelBtn);
+} else {
+var upgradeBtn = document.createElement('button');
+upgradeBtn.textContent = 'Passa al piano completo';
+upgradeBtn.style.cssText = 'background:var(--yellow);color:var(--navy);border:none;padding:10px 18px;border-radius:8px;font-weight:800;cursor:pointer;';
+upgradeBtn.onclick = async function(){
+upgradeBtn.disabled = true; upgradeBtn.textContent = 'Un momento...';
+var r = await apiSend('/api/company/create-checkout-session','POST',{});
+if(r.ok && r.data && r.data.url){ window.location.href = r.data.url; }
+else { flashStatus((r.data&&r.data.error)||'Errore nell\u2019avvio del pagamento, riprova'); upgradeBtn.disabled=false; upgradeBtn.textContent='Passa al piano completo'; }
+};
+planActionWrap.appendChild(upgradeBtn);
+}
+planHeader.appendChild(planActionWrap);
+planCard.appendChild(planHeader);
+if(companyPlan!=='pro'){
+planCard.appendChild(el('div',null,'<div style="margin-top:12px;font-size:13px;opacity:.85;">Sblocca Scostamenti, Previsionale incassi, Listino & margini, Statistiche storiche e la gestione completa del Budget. Disdicibile quando vuoi, senza vincoli.</div>'));
+}
+main.appendChild(planCard);
 var yearCard = el('div','card');
 yearCard.appendChild(el('h2',null,'Chiusura anno'));
 yearCard.appendChild(el('div','help-tip','Chiudere l\u2019anno archivia sedi, voci di costo, budget e Consuntivo mensile cos\u00ec come sono ora, poi azzera SOLO il Consuntivo per ripartire puliti col nuovo anno. La struttura di Budget resta com\u2019\u00e8, come punto di partenza. Puoi sempre riaprire un anno archiviato per correggerlo.'));
@@ -3326,6 +3366,7 @@ if(urlParams.get('checkout')) checkoutResult = urlParams.get('checkout');
 }catch(e){}
 startInactivityWatcher();
 bootApp();
+
 
 
 
