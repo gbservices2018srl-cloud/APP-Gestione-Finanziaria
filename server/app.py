@@ -588,7 +588,14 @@ def company_register():
 @app.route("/api/company/create-checkout-session", methods=["POST"])
 def create_checkout_session():
     body = request.get_json(force=True, silent=True) or {}
-    company_id = (body.get("companyId") or "").strip()
+    # se il richiedente e' gia' loggato, usiamo SEMPRE la sua identita' di
+    # sessione (mai fidarsi di un companyId scelto dal client mentre e'
+    # loggato); il companyId nel corpo resta necessario solo nel flusso di
+    # registrazione, quando non esiste ancora una sessione valida.
+    if session.get("role") == "company" and session.get("company_id"):
+        company_id = session["company_id"]
+    else:
+        company_id = (body.get("companyId") or "").strip()
     if not company_id:
         return json_error("Richiesta non valida.")
     if stripe is None or not os.environ.get("STRIPE_SECRET_KEY") or not os.environ.get("STRIPE_PRICE_ID"):
@@ -612,6 +619,40 @@ def create_checkout_session():
     except Exception as e:
         app.logger.error("Errore nella creazione della sessione Stripe: %s", e)
         return json_error("Errore nell'avvio del pagamento. Riprova tra poco.", 500)
+
+
+@app.route("/api/company/cancel-subscription", methods=["POST"])
+def cancel_subscription():
+    if not require_company():
+        return json_error("Non autorizzato.", 401)
+    ok, err = check_company_access()
+    if not ok:
+        return err
+    if stripe is None or not os.environ.get("STRIPE_SECRET_KEY"):
+        return json_error("I pagamenti non sono ancora configurati sul server. Contatta l'amministratore.", 500)
+    db = get_db()
+    row = db.execute(
+        "SELECT stripe_subscription_id, name, email FROM companies WHERE id=?",
+        (session["company_id"],)
+    ).fetchone()
+    if row is None:
+        return json_error("Azienda non trovata.", 404)
+    if not row["stripe_subscription_id"]:
+        return json_error("Non risulta un abbonamento attivo da disdire.", 400)
+    try:
+        stripe.Subscription.modify(row["stripe_subscription_id"], cancel_at_period_end=True)
+    except Exception as e:
+        app.logger.error("Errore nella disdetta della sottoscrizione Stripe: %s", e)
+        return json_error("Errore nella disdetta. Riprova tra poco o contatta l'assistenza.", 500)
+    if row["email"]:
+        send_email_safe(
+            row["email"],
+            "Disdetta abbonamento confermata",
+            "Ciao,\nabbiamo ricevuto la tua richiesta di disdetta per \"" + row["name"] + "\". "
+            "Il piano completo restera' attivo fino alla fine del periodo gia' pagato, poi l'account "
+            "tornera' automaticamente al piano gratuito. Puoi riattivarlo quando vuoi."
+        )
+    return jsonify({"ok": True})
 
 
 @app.route("/api/stripe/webhook", methods=["POST"])
