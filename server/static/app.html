@@ -127,6 +127,9 @@ table.datatable select:focus{outline:2px solid var(--teal); border-color:var(--t
 .badge.bad{background:#fbe4e2; color:var(--red);}
 
 .notebox{background:#fdf7e0; border:1px solid var(--yellow); border-radius:8px; padding:12px 16px; font-size:12.8px; color:#6b5c00; margin-bottom:16px;}
+.month-highlight{animation:monthFlash 2.2s ease;}
+@keyframes monthFlash{0%{background:var(--yellow);box-shadow:0 0 0 3px var(--yellow);}70%{background:var(--yellow);box-shadow:0 0 0 3px var(--yellow);}100%{background:transparent;box-shadow:none;}}
+
 .notebox.fix{background:var(--purple-light); border-color:#d7c0da; color:#5a2f60;}
 
 .site-selector{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px;}
@@ -269,6 +272,7 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 <script id="listinoData" type="application/json">[{"label": "Aggiunta ganci per protesi mobili", "tariffa": 115, "tempo": 30, "materiali": 5.4, "lab": 35, "percProf": 0, "costoProf": 0}, {"label": "Protesi in Composito avvitata su impianti (impianti esclusi)", "tariffa": 3397, "tempo": 120, "materiali": 50, "lab": 900, "percProf": 0, "costoProf": 350}, {"label": "Protesi in Zirconio avvitata su impianti (impianti esclusi)", "tariffa": 4630, "tempo": 120, "materiali": 50, "lab": 1700, "percProf": 0, "costoProf": 350}, {"label": "Protesi in Ceramica Integrale avvitata su impianti (impianti esclusi)", "tariffa": 5120, "tempo": 120, "materiali": 50, "lab": 1950, "percProf": 0, "costoProf": 350}, {"label": "Allungamento corona clinica", "tariffa": 276, "tempo": 60, "materiali": 14.6, "lab": 0, "percProf": 0, "costoProf": 70}, {"label": "Apicetomia", "tariffa": 386, "tempo": 45, "materiali": 14, "lab": 0, "percProf": 0, "costoProf": 80}, {"label": "Applicazione brillante su elementi anteriori", "tariffa": 83, "tempo": 20, "materiali": 16, "lab": 0, "percProf": 0, "costoProf": 15}, {"label": "Applicazione di fluoro topico a seduta", "tariffa": 33, "tempo": 10, "materiali": 2.4, "lab": 0, "percProf": 0, "costoProf": 9.9}, {"label": "Attacco per protesi combinata", "tariffa": 165, "tempo": 1, "materiali": 0, "lab": 80, "percProf": 0, "costoProf": 0}, {"label": "Bite per bruxismo", "tariffa": 331, "tempo": 20, "materiali": 5.6, "lab": 60, "percProf": 0, "costoProf": 50}, {"label": "Cementazione", "tariffa": 66, "tempo": 15, "materiali": 5.2, "lab": 0, "percProf": 0, "costoProf": 15}, {"label": "Chirurgia parodontale", "tariffa": 331, "tempo": 80, "materiali": 21.1, "lab": 0, "percProf": 0, "costoProf": 90}, {"label": "Cistectomia", "tariffa": 419, "tempo": 60, "materiali": 43, "lab": 0, "percProf": 0, "costoProf": 80}, {"label": "Condizionamento a seduta", "tariffa": 32, "tempo": 15, "materiali": 5, "lab": 0, "percProf": 0, "costoProf": 25}, {"label": "Contenzione ortodontica inferiore", "tariffa": 198, "tempo": 10, "materiali": 15, "lab": 40, "percProf": 0, "costoProf": 20}, {"label": "Contenzione ortodontica superiore", "tariffa": 198, "tempo": 10, "materiali": 5.4, "lab": 40, "percProf": 0, "costoProf": 20}, {"label": "Contenzioni orotodontiche 2 set", "tariffa": 349, "tempo": 10, "materiali": 10, "lab": 120, "percProf": 0, "costoProf": 20}, {"label": "Contenzioni ortodontiche 1 set", "tariffa": 230, "tempo": 10, "materiali": 0, "lab": 0, "percProf": 0, "costoProf": 20}, {"label": "Contributo per indagine radiologica 2D", "tariffa": 35, "tempo": 10, "materiali": 3.5, "lab": 0, "percProf": 0, "costoProf": 0}, {"label": "Contributo per indagine radiologica 3D", "tariffa": 85, "tempo": 20, "materiali": 3.5, "lab": 0, "percProf": 0, "costoProf": 0}, {"label": "Contributo per indagine radiologica teleradiografica", "tariffa": 35, "tempo": 10, "materiali": 3.5, "lab": 0, "percProf": 0, "costoProf": 0}, {"label": "Corona definitiva su dente naturale", "tariffa": 823, "tempo": 0, "materiali": 15, "lab": 90, "percProf": 0, "costoProf": 150}, {"label": "Corona definitiva su impianto", "tariffa": 839, "tempo": 80, "materiali": 15, "lab": 130, "percProf": 0, "costoProf": 150}, {"label": "Corona Provvisoria in resina", "tariffa": 126, "tempo": 40, "materiali": 5.95, "lab": 20, "percProf": 0, "costoProf": 15}, {"label": "Devitalizzazione bicanalare con ricostruzione", "tariffa": 341, "tempo": 120, "materiali": 18.87, "lab": 0, "percProf": 0, "costoProf": 110}, {"label": "Devitalizzazione monocanalare con ricostruzione", "tariffa": 226, "tempo": 90, "materiali": 12.3, "lab": 0, "percProf": 0, "costoProf": 90}, {"label": "Devitalizzazione tricanalare con ricostruzione", "tariffa": 457, "tempo": 120, "materiali": 35, "lab": 0, "percProf": 0, "costoProf": 130}, {"label": "Dima chirurgica implantare o protesica per arcata", "tariffa": 389, "tempo": 30, "materiali": 5.4, "lab": 90, "percProf": 0, "costoProf": 0}, {"label": "Elemento aggiuntivo per protesi mobili", "tariffa": 154, "tempo": 30, "materiali": 5.4, "lab": 35, "percProf": 0, "costoProf": 0}, {"label": "Escissione di lesione fibrotica", "tariffa": 312, "tempo": 30, "materiali": 5.4, "lab": 0, "percProf": 0, "costoProf": 75}, {"label": "Estrazione canino incluso", "tariffa": 421, "tempo": 60, "materiali": 10, "lab": 0, "percProf": 0, "costoProf": 90}, {"label": "Estrazione chirurgica con sutura", "tariffa": 200, "tempo": 75, "materiali": 18, "lab": 0, "percProf": 0, "costoProf": 50}, {"label": "Estrazione elemento deciduo", "tariffa": 66, "tempo": 30, "materiali": 5.9, "lab": 0, "percProf": 0, "costoProf": 20}, {"label": "Estrazione ottavo estruso", "tariffa": 198, "tempo": 60, "materiali": 18, "lab": 0, "percProf": 0, "costoProf": 50}, {"label": "Estrazione ottavo incluso", "tariffa": 452, "tempo": 90, "materiali": 30, "lab": 0, "percProf": 0, "costoProf": 120}, {"label": "Estrazione semichirurgica con eventuale sutura", "tariffa": 156, "tempo": 45, "materiali": 0, "lab": 0, "percProf": 0, "costoProf": 50}, {"label": "Estrazioni in blocco e bonifica Inferiore", "tariffa": 473, "tempo": 60, "materiali": 40, "lab": 0, "percProf": 0, "costoProf": 90}, {"label": "Estrazioni in blocco e bonifica Superiore", "tariffa": 473, "tempo": 60, "materiali": 40, "lab": 0, "percProf": 0, "costoProf": 90}, {"label": "Estrusione chirurgica a elemento", "tariffa": 231, "tempo": 60, "materiali": 15, "lab": 0, "percProf": 0, "costoProf": 70}, {"label": "Faccette dentali", "tariffa": 1145, "tempo": 90, "materiali": 21.5, "lab": 130, "percProf": 0, "costoProf": 180}, {"label": "frenulectomia", "tariffa": 265, "tempo": 30, "materiali": 10, "lab": 0, "percProf": 0, "costoProf": 75}, {"label": "Gancio estetico su scheletrato", "tariffa": 165, "tempo": 30, "materiali": 5.4, "lab": 90, "percProf": 0, "costoProf": 0}, {"label": "Garanzia zero carie", "tariffa": 549, "tempo": 0, "materiali": 20, "lab": 0, "percProf": 0, "costoProf": 50}, {"label": "Gengivectomia", "tariffa": 193, "tempo": 30, "materiali": 13.4, "lab": 0, "percProf": 0, "costoProf": 50}, {"label": "Igiene orale pedodontica", "tariffa": 56, "tempo": 20, "materiali": 6.8, "lab": 0, "percProf": 0.35, "costoProf": 0}, {"label": "Igiene orale professionale", "tariffa": 93, "tempo": 60, "materiali": 7.05, "lab": 0, "percProf": 0.35, "costoProf": 0}, {"label": "Igiene orale protocollo Woodpecker", "tariffa": 139, "tempo": 60, "materiali": 14.4, "lab": 0, "percProf": 0.35, "costoProf": 0}, {"label": "Igiene Pacchetto ortodontico Full6", "tariffa": 546, "tempo": 180, "materiali": 60, "lab": 0, "percProf": 0.35, "costoProf": 0}, {"label": "Igiene professionale ortodontica", "tariffa": 54, "tempo": 20, "materiali": 5, "lab": 0, "percProf": 0.35, "costoProf": 15}, {"label": "Illumininate del sorriso - Click", "tariffa": 49, "tempo": 15, "materiali": 14, "lab": 0, "percProf": 0.35, "costoProf": 15}, {"label": "Innesto connettivale", "tariffa": 630, "tempo": 60, "materiali": 14, "lab": 0, "percProf": 0, "costoProf": 110}, {"label": "Inserimento vite intraossea con componentistica", "tariffa": 944, "tempo": 60, "materiali": 100, "lab": 0, "percProf": 0, "costoProf": 170}, {"label": "Intarsio onlay/inlay", "tariffa": 683, "tempo": 90, "materiali": 8.65, "lab": 90, "percProf": 0, "costoProf": 100}, {"label": "Lezione igiene orale domiciliare", "tariffa": 31, "tempo": 15, "materiali": 1.5, "lab": 0, "percProf": 0.35, "costoProf": 0}, {"label": "Maryland definitivo a elemento", "tariffa": 688, "tempo": 50, "materiali": 5.6, "lab": 90, "percProf": 0, "costoProf": 100}, {"label": "Maryland provvisorio a elemento", "tariffa": 221, "tempo": 50, "materiali": 5.6, "lab": 40, "percProf": 0, "costoProf": 35}, {"label": "mascherina per mock up estetico", "tariffa": 172, "tempo": 0, "materiali": 5, "lab": 40, "percProf": 0, "costoProf": 0}, {"label": "Medicazione di urgenza", "tariffa": 88, "tempo": 20, "materiali": 10, "lab": 0, "percProf": 0, "costoProf": 15}, {"label": "Membrana per rigenerazione ossea", "tariffa": 172, "tempo": 15, "materiali": 80, "lab": 0, "percProf": 0, "costoProf": 0}, {"label": "Mini rialzo Seno mascellare", "tariffa": 480, "tempo": 45, "materiali": 120, "lab": 0, "percProf": 0, "costoProf": 100}, {"label": "Moncone in composito su perno", "tariffa": 93, "tempo": 30, "materiali": 20.58, "lab": 0, "percProf": 0, "costoProf": 0}, {"label": "Moncone su impianto / ball", "tariffa": 154, "tempo": 10, "materiali": 70, "lab": 0, "percProf": 0, "costoProf": 20}, {"label": "Otturazione complessa deciduo", "tariffa": 132, "tempo": 50, "materiali": 10.6, "lab": 0, "percProf": 0, "costoProf": 25}, {"label": "Otturazione I classe", "tariffa": 137, "tempo": 60, "materiali": 10.6, "lab": 0, "percProf": 0, "costoProf": 35}, {"label": "Otturazione II classe", "tariffa": 169, "tempo": 75, "materiali": 11.2, "lab": 0, "percProf": 0, "costoProf": 40}, {"label": "Otturazione III classe", "tariffa": 156, "tempo": 60, "materiali": 11.2, "lab": 0, "percProf": 0, "costoProf": 40}, {"label": "Otturazione semplice deciduo", "tariffa": 100, "tempo": 40, "materiali": 10.6, "lab": 0, "percProf": 0, "costoProf": 20}, {"label": "Otturazione V classe", "tariffa": 114, "tempo": 40, "materiali": 10.94, "lab": 0, "percProf": 0, "costoProf": 30}, {"label": "Oturazione IV classe", "tariffa": 169, "tempo": 60, "materiali": 11.2, "lab": 0, "percProf": 0, "costoProf": 40}, {"label": "Paradenti sportivo", "tariffa": 399, "tempo": 30, "materiali": 5, "lab": 90, "percProf": 0, "costoProf": 30}, {"label": "Percorso prevenzione annuale (2 sedute)", "tariffa": 158, "tempo": 40, "materiali": 9.6, "lab": 0, "percProf": 0.35, "costoProf": 0}, {"label": "Percorso prevenzione annuale (3 sedute)", "tariffa": 233, "tempo": 40, "materiali": 14.4, "lab": 0, "percProf": 0.35, "costoProf": 0}, {"label": "Perno intracanalare", "tariffa": 82, "tempo": 20, "materiali": 6.4, "lab": 0, "percProf": 0, "costoProf": 20}, {"label": "Carico immediato di elemento singolo provvisorio", "tariffa": 38, "tempo": 0, "materiali": 0, "lab": 10, "percProf": 0, "costoProf": 0}, {"label": "Ponte Roach", "tariffa": 176, "tempo": 30, "materiali": 5.6, "lab": 30, "percProf": 0, "costoProf": 40}, {"label": "Preservazione alveolare con osso sintetico", "tariffa": 336, "tempo": 40, "materiali": 60, "lab": 0, "percProf": 0, "costoProf": 40}, {"label": "Prima visita gnatologica", "tariffa": 130, "tempo": 20, "materiali": 4.8, "lab": 0, "percProf": 0, "costoProf": 90}, {"label": "Prima visita patologia orale", "tariffa": 160, "tempo": 30, "materiali": 5, "lab": 0, "percProf": 0, "costoProf": 70}, {"label": "Prosecuzione terapia odontoiatrica domiciliare", "tariffa": 0, "tempo": 0, "materiali": 0, "lab": 0, "percProf": 0, "costoProf": 0}, {"label": "Protesi mobile definitiva su 2 o 4 impianti con ball- impianti esclusi", "tariffa": 2390, "tempo": 60, "materiali": 40, "lab": 280, "percProf": 0, "costoProf": 315}, {"label": "Protesi mobile totale definitiva per arcata", "tariffa": 1654, "tempo": 120, "materiali": 25.6, "lab": 300, "percProf": 0, "costoProf": 290}, {"label": "Protesi parziale con ganci a filo da 3 a 6 elementi", "tariffa": 891, "tempo": 105, "materiali": 10.9, "lab": 160, "percProf": 0, "costoProf": 130}, {"label": "Protesi parziale con ganci a filo da 6 a 10 elemeni", "tariffa": 1066, "tempo": 105, "materiali": 10.9, "lab": 160, "percProf": 0, "costoProf": 130}, {"label": "Protesi totale provvisoria per arcata", "tariffa": 760, "tempo": 105, "materiali": 10.9, "lab": 230, "percProf": 0, "costoProf": 150}, {"label": "Pulpotomia/Pulpectomia", "tariffa": 161, "tempo": 80, "materiali": 10.6, "lab": 0, "percProf": 0, "costoProf": 48}, {"label": "Rialzi del morso in composito", "tariffa": 100, "tempo": 20, "materiali": 7.2, "lab": 0, "percProf": 0, "costoProf": 30}, {"label": "Rialzo del seno mascellare", "tariffa": 1985, "tempo": 90, "materiali": 400, "lab": 0, "percProf": 0, "costoProf": 210}, {"label": "Ribasatura protesi ad arcata", "tariffa": 215, "tempo": 45, "materiali": 7.6, "lab": 60, "percProf": 0, "costoProf": 35}, {"label": "Ricostruzione estetica con Mock-up", "tariffa": 249, "tempo": 90, "materiali": 13.5, "lab": 35, "percProf": 0, "costoProf": 60}, {"label": "Ricostruzione MOD", "tariffa": 187, "tempo": 75, "materiali": 11.57, "lab": 0, "percProf": 0, "costoProf": 45}, {"label": "Ricostruzione semplice", "tariffa": 96, "tempo": 30, "materiali": 11.57, "lab": 0, "percProf": 0, "costoProf": 27}, {"label": "Rigenerazione ossea 1 sito", "tariffa": 672, "tempo": 45, "materiali": 150, "lab": 0, "percProf": 0, "costoProf": 110}, {"label": "Rimozione amalgama e sostituzione otturazione", "tariffa": 190, "tempo": 75, "materiali": 18, "lab": 0, "percProf": 0, "costoProf": 50}, {"label": "Rimozione apparecchio ortodontico 2 arcate", "tariffa": 290, "tempo": 45, "materiali": 5, "lab": 0, "percProf": 0, "costoProf": 70}, {"label": "Rimozione cisti complessa", "tariffa": 1407, "tempo": 60, "materiali": 180, "lab": 0, "percProf": 0, "costoProf": 180}, {"label": "Rimozione composito e sostituzione otturazione", "tariffa": 190, "tempo": 75, "materiali": 12.72, "lab": 0, "percProf": 0, "costoProf": 50}, {"label": "rimozione perno pre-esistente", "tariffa": 93, "tempo": 20, "materiali": 10, "lab": 0, "percProf": 0, "costoProf": 10}, {"label": "Riparazione protesi", "tariffa": 156, "tempo": 20, "materiali": 5.5, "lab": 35, "percProf": 0, "costoProf": 0}, {"label": "Ritrattamento bicanale con ricostruzione", "tariffa": 415, "tempo": 150, "materiali": 21.1, "lab": 0, "percProf": 0, "costoProf": 125}, {"label": "Ritrattamento monocanalare con ricostruzione", "tariffa": 299, "tempo": 120, "materiali": 19.1, "lab": 0, "percProf": 0, "costoProf": 110}, {"label": "Ritrattamento tricanalare con ricostruzione", "tariffa": 486, "tempo": 180, "materiali": 26.2, "lab": 0, "percProf": 0, "costoProf": 145}, {"label": "Rizectomia", "tariffa": 185, "tempo": 60, "materiali": 20, "lab": 0, "percProf": 0, "costoProf": 55}, {"label": "Sbiancamento dentale in office", "tariffa": 560, "tempo": 60, "materiali": 55, "lab": 0, "percProf": 0.35, "costoProf": 0}, {"label": "Sbiancamento domiciliare per arcata", "tariffa": 147, "tempo": 20, "materiali": 0, "lab": 45, "percProf": 0.35, "costoProf": 0}, {"label": "Sbiancamento endodontico con ricostruzione semplice", "tariffa": 252, "tempo": 90, "materiali": 20.3, "lab": 0, "percProf": 0, "costoProf": 70}, {"label": "Siringa singola per sbiancamento domicilare", "tariffa": 46, "tempo": 0, "materiali": 13.5, "lab": 0, "percProf": 0, "costoProf": 0}, {"label": "Scheletrato con attacchi incluisi superiore", "tariffa": 2095, "tempo": 190, "materiali": 23.42, "lab": 430, "percProf": 0, "costoProf": 305}, {"label": "Scheletrato con attacchi inclusi inferiore", "tariffa": 2095, "tempo": 190, "materiali": 23.4, "lab": 430, "percProf": 0, "costoProf": 305}, {"label": "Scheletrato inferiore", "tariffa": 1890, "tempo": 120, "materiali": 23.4, "lab": 350, "percProf": 0, "costoProf": 295}, {"label": "Scheletrato superiore", "tariffa": 1890, "tempo": 120, "materiali": 23.42, "lab": 350, "percProf": 0, "costoProf": 295}, {"label": "Seduta di Laser terapia", "tariffa": 58, "tempo": 15, "materiali": 6.4, "lab": 0, "percProf": 0.35, "costoProf": 0}, {"label": "Sigillatura a elemento", "tariffa": 43, "tempo": 15, "materiali": 5.1, "lab": 0, "percProf": 0, "costoProf": 12}, {"label": "Sigillatura deciduo a elemento", "tariffa": 43, "tempo": 15, "materiali": 5.8, "lab": 0, "percProf": 0.35, "costoProf": 12}, {"label": "Siringa con prodotto per sbiancamento domiciliare", "tariffa": 53, "tempo": 0, "materiali": 13, "lab": 0, "percProf": 0, "costoProf": 0}, {"label": "Smacchiamento con polveri", "tariffa": 45, "tempo": 20, "materiali": 6.8, "lab": 0, "percProf": 0.35, "costoProf": 0}, {"label": "Sostituzione gommini per protesi implantare", "tariffa": 93, "tempo": 20, "materiali": 10.4, "lab": 15, "percProf": 0, "costoProf": 28}, {"label": "Splintaggio a elemento", "tariffa": 45, "tempo": 5, "materiali": 1, "lab": 0, "percProf": 0, "costoProf": 15}, {"label": "Studio del caso con mock up", "tariffa": 204, "tempo": 45, "materiali": 5, "lab": 0, "percProf": 0, "costoProf": 0}, {"label": "Studio del caso ortodontico", "tariffa": 184, "tempo": 60, "materiali": 5.4, "lab": 0, "percProf": 0, "costoProf": 0}, {"label": "Sutura", "tariffa": 44, "tempo": 10, "materiali": 15, "lab": 0, "percProf": 0, "costoProf": 13}, {"label": "Terapia distalizzazione preprotesica", "tariffa": 1607, "tempo": 120, "materiali": 250, "lab": 0, "percProf": 0, "costoProf": 500}, {"label": "Terapia gnatologica con bite", "tariffa": 1580, "tempo": 140, "materiali": 32.4, "lab": 135, "percProf": 0, "costoProf": 780}, {"label": "Terapia ortodontica Fissa fast (max 12 mesi)", "tariffa": 2980, "tempo": 120, "materiali": 700, "lab": 120, "percProf": 0, "costoProf": 125}, {"label": "Terapia ortodontica Fissa Full", "tariffa": 3822, "tempo": 240, "materiali": 360, "lab": 0, "percProf": 0, "costoProf": 2000}, {"label": "Terapia ortodontica solo DistalRep", "tariffa": 903, "tempo": 180, "materiali": 100, "lab": 130, "percProf": 0, "costoProf": 0}, {"label": "Terapia ortodontica intercettiva annuale", "tariffa": 1800, "tempo": 240, "materiali": 62.6, "lab": 180, "percProf": 0.3, "costoProf": 0}, {"label": "Terapia parodontale a cielo aperto per sestante", "tariffa": 331, "tempo": 70, "materiali": 15, "lab": 0, "percProf": 0, "costoProf": 0}, {"label": "Terapia parodontale non chirurgica a quadrante", "tariffa": 176, "tempo": 60, "materiali": 6.8, "lab": 0, "percProf": 0.35, "costoProf": 0}, {"label": "Terapia Parodontale Non Chirurgica Full Mouth (TPNC)", "tariffa": 780, "tempo": 180, "materiali": 18.4, "lab": 0, "percProf": 0.35, "costoProf": 0}, {"label": "Terpia Nuvola Allineatori fast (max 12 mesi)", "tariffa": 2300, "tempo": 120, "materiali": 200, "lab": 250, "percProf": 0, "costoProf": 125}, {"label": "Terpia Nuvola Allineatori Full", "tariffa": 5200, "tempo": 240, "materiali": 200, "lab": 500, "percProf": 0, "costoProf": 125}, {"label": "Terpia Nuvola Allineatori Moderate (max 18 mesi)", "tariffa": 3750, "tempo": 120, "materiali": 200, "lab": 250, "percProf": 0, "costoProf": 125}, {"label": "To Smile child", "tariffa": 99, "tempo": 0, "materiali": 0, "lab": 0, "percProf": 0, "costoProf": 0}, {"label": "To Smile child annuo", "tariffa": 29.9, "tempo": 0, "materiali": 0, "lab": 0, "percProf": 0, "costoProf": 0}, {"label": "Trattamento desensibilizzante", "tariffa": 31, "tempo": 10, "materiali": 6.4, "lab": 0, "percProf": 0.35, "costoProf": 0}, {"label": "Trattamento laser per alitosi orale a seduta", "tariffa": 145, "tempo": 15, "materiali": 5, "lab": 0, "percProf": 0.35, "costoProf": 0}, {"label": "Urgenza", "tariffa": 90, "tempo": 20, "materiali": 5, "lab": 0, "percProf": 0, "costoProf": 15}, {"label": "Visita parodontale con sondaggio", "tariffa": 91, "tempo": 30, "materiali": 5, "lab": 0, "percProf": 0.35, "costoProf": 0}, {"label": "Incappucciamento", "tariffa": 231, "tempo": 30, "materiali": 34, "lab": 0, "percProf": 0, "costoProf": 64}, {"label": "Manteniore di spazio", "tariffa": 219, "tempo": 30, "materiali": 6.1, "lab": 25, "percProf": 0, "costoProf": 45}]</script>
 
 <script>
+
 
 
 
@@ -1094,7 +1098,7 @@ STATE.statsYears.forEach(function(a){ if(years.indexOf(a.year)===-1) years.push(
 if(years.indexOf(STATE.currentYear)===-1) years.push(STATE.currentYear);
 years.sort(function(a,b){ return a-b; });
 
-var labels = [], revenueData = [], produzioneData = [], liquidityData = [];
+var labels = [], revenueData = [], produzioneData = [], liquidityData = [], points = [];
 
 years.forEach(function(year){
 var isCurrentYear = (year === STATE.currentYear);
@@ -1103,6 +1107,7 @@ var statsYear = findStatsYear(year);
 
 for(var m=0; m<12; m++){
 labels.push(MONTHS_SHORT[m]+' \u2019'+String(year).slice(2));
+points.push({year:year, month:m});
 
 var revSum = 0, prodSum = 0;
 if(isCurrentYear){
@@ -1129,7 +1134,61 @@ liquidityData.push(bankTotalMonth(year, m));
 }
 });
 
-return {labels:labels, revenue:revenueData, produzione:produzioneData, liquidity:liquidityData};
+return {labels:labels, revenue:revenueData, produzione:produzioneData, liquidity:liquidityData, points:points};
+}
+function scrollAndHighlightMonth(month){
+setTimeout(function(){
+var cells = document.querySelectorAll('[data-m="'+month+'"]');
+if(cells.length===0) return;
+cells[0].scrollIntoView({behavior:'smooth', block:'center', inline:'center'});
+cells.forEach(function(c){
+var wrapper = (c.tagName==='TD' || c.tagName==='td') ? c : (c.closest ? (c.closest('td')||c) : c);
+wrapper.classList.add('month-highlight');
+setTimeout(function(){ wrapper.classList.remove('month-highlight'); }, 2200);
+});
+}, 60);
+}
+function navigateToMonthData(year, month, siteId){
+if(year === STATE.currentYear){
+currentPage = 'consuntivo';
+currentConsuntivoSite = siteId || 'TOTAL';
+render();
+scrollAndHighlightMonth(month);
+return;
+}
+var inStatsYears = !!findStatsYear(year);
+var inYearArchives = STATE.yearArchives.some(function(a){ return a.year===year; });
+if(inStatsYears){
+currentPage = 'statistiche';
+statsSelectedYear = year;
+render();
+scrollAndHighlightMonth(month);
+return;
+}
+if(inYearArchives){
+showConfirmModal('Questo dato appartiene all\u2019anno '+year+', gi\u00e0 chiuso con "Chiudi anno". Per vederlo o correggerlo bisogna riaprirlo: potrai richiuderlo in qualsiasi momento dal bottone in alto. Vuoi procedere?', function(){
+enterArchivedYearEdit(year);
+currentPage = 'consuntivo';
+currentConsuntivoSite = siteId || 'TOTAL';
+render();
+scrollAndHighlightMonth(month);
+});
+return;
+}
+currentPage = 'statistiche';
+statsSelectedYear = year;
+render();
+}
+function navigateToLiquidityData(year, month){
+currentPage = 'statistiche';
+statsSelectedYear = year;
+render();
+scrollAndHighlightMonth(month);
+}
+function navigateToBudgetSite(siteId){
+currentPage = 'budget';
+currentBudgetSite = siteId;
+render();
 }
 function archiveCurrentYear(year){
 if(STATE._editingArchivedYear!==null) return false;
@@ -1212,6 +1271,7 @@ var PAGES = [
 ];
 var currentPage = 'dashboard';
 var currentBudgetSite = null;
+var currentDashboardSite = 'TOTAL';
 var statsSelectedYear = null;
 var currentIncassiSite = null;
 var GATED_PAGES = ['scostamenti','incassi','listino','statistiche'];
@@ -1822,16 +1882,37 @@ inp.addEventListener('keydown', function(ev){ if(ev.key==='Enter'){ ev.preventDe
 overlay.addEventListener('click', function(ev){ if(ev.target===overlay) closeAppModal(); });
 }
 RENDERERS.dashboard = function(main){
-var budget = calcBudgetAll();
-var scost = scostamentiSummary();
-var ce = calcContoEconomico();
-var mc = scost.mc;
 main.appendChild(el('h1','pagetitle','Riepilogo generale'));
 main.appendChild(el('p','pagesub','Vista d\u2019insieme su budget, consuntivo e andamento di '+STATE.sites.length+' sed'+(STATE.sites.length===1?'e':'i')+'.'));
 main.appendChild(makeDownloadButton('riepilogo'));
 if(STATE.sites.length===0){
 main.appendChild(el('div','notebox','Non hai ancora creato nessuna sede. Vai su <b>Budget costi</b> per crearne una (anche una sola, se l\u2019azienda ha un unico centro).'));
+return;
 }
+if(currentDashboardSite===null || (currentDashboardSite!=='TOTAL' && !findSite(currentDashboardSite))) currentDashboardSite = 'TOTAL';
+if(STATE.sites.length>1){
+var dsel = el('div','site-selector');
+var dtotBtn = el('button','total-tab'+(currentDashboardSite==='TOTAL'?' active':''),'&#931; Totale azienda');
+dtotBtn.onclick = function(){ currentDashboardSite='TOTAL'; render(); };
+dsel.appendChild(dtotBtn);
+STATE.sites.forEach(function(s){
+var b = el('button', s.id===currentDashboardSite?'active':'', s.name);
+b.onclick = function(){ currentDashboardSite = s.id; render(); };
+dsel.appendChild(b);
+});
+main.appendChild(dsel);
+}
+if(currentDashboardSite==='TOTAL'){
+renderDashboardTotale(main);
+} else {
+renderDashboardSite(main, currentDashboardSite);
+}
+};
+function renderDashboardTotale(main){
+var budget = calcBudgetAll();
+var scost = scostamentiSummary();
+var ce = calcContoEconomico();
+var mc = scost.mc;
 var kpis = el('div','kpi-grid');
 function kpi(label,value,sub,subclass){
 var k = el('div','kpi'); k.appendChild(el('div','label',label)); k.appendChild(el('div','value',value));
@@ -1850,32 +1931,35 @@ kpis.appendChild(kpi('Target mensile (tutte le sedi)', fmtEUR(budget.tot.targetM
 main.appendChild(kpis);
 var two = el('div','two-col');
 var c1 = el('div','card'); c1.appendChild(el('h2',null,'Fatturato vs Costi &mdash; mese per mese'));
+c1.appendChild(el('div','help-tip','Clicca una colonna per aprire il Consuntivo mensile di quel mese.'));
 var chart1 = el('div','chart-wrap'); var cv1=document.createElement('canvas'); chart1.appendChild(cv1); c1.appendChild(chart1);
 two.appendChild(c1);
 var c2 = el('div','card'); c2.appendChild(el('h2',null,'Composizione costi (proiezione annua)'));
+c2.appendChild(el('div','help-tip','Clicca una fetta per aprire Budget costi.'));
 var chart2 = el('div','chart-wrap'); var cv2=document.createElement('canvas'); chart2.appendChild(cv2); c2.appendChild(chart2);
 two.appendChild(c2);
 main.appendChild(two);
 var c3 = el('div','card'); c3.appendChild(el('h2',null,'Budget annuo per sede (costi fissi)'));
+c3.appendChild(el('div','help-tip','Clicca una colonna per aprire Budget costi di quella sede.'));
 var chart3 = el('div','chart-wrap'); var cv3=document.createElement('canvas'); chart3.appendChild(cv3); c3.appendChild(chart3);
 main.appendChild(c3);
 main.appendChild(el('div','section-title','Andamento storico dell\u2019azienda'));
 var c3b = el('div','card'); c3b.appendChild(el('h2',null,'Fatturato e produzione, dalla nascita ad oggi'));
-c3b.appendChild(el('div','help-tip','Include automaticamente tutti gli anni chiusi con "Chiudi anno" (Backup dati), pi\u00f9 l\u2019anno corrente sempre aggiornato in tempo reale.'));
+c3b.appendChild(el('div','help-tip','Include automaticamente tutti gli anni chiusi con "Chiudi anno" (Backup dati), pi\u00f9 l\u2019anno corrente sempre aggiornato in tempo reale. Clicca un punto per aprire quel mese.'));
 var chart3b = el('div','chart-wrap'); chart3b.style.height='380px'; var cv3b=document.createElement('canvas'); chart3b.appendChild(cv3b); c3b.appendChild(chart3b);
 main.appendChild(c3b);
 var c3c = el('div','card'); c3c.appendChild(el('h2',null,'Liquidit\u00e0, dalla nascita ad oggi'));
-c3c.appendChild(el('div','help-tip','Somma dei saldi di tutti i conti correnti (Statistiche storiche), mese per mese, su tutti gli anni disponibili.'));
+c3c.appendChild(el('div','help-tip','Somma dei saldi di tutti i conti correnti (Statistiche storiche), mese per mese, su tutti gli anni disponibili. Clicca un punto per aprire quel mese.'));
 var chart3c = el('div','chart-wrap'); chart3c.style.height='380px'; var cv3c=document.createElement('canvas'); chart3c.appendChild(cv3c); c3c.appendChild(chart3c);
 main.appendChild(c3c);
 main.appendChild(el('div','section-title','Fatturato'));
 var c4 = el('div','card'); c4.appendChild(el('h2',null,'Andamento fatturato per sede'));
-c4.appendChild(el('div','help-tip','Clicca sui nomi nella legenda per nascondere/mostrare la linea di una sede.'));
+c4.appendChild(el('div','help-tip','Clicca sui nomi nella legenda per nascondere/mostrare la linea di una sede. Clicca un punto per aprire quel mese in quella sede.'));
 var chart4 = el('div','chart-wrap'); chart4.style.height='380px'; var cv4=document.createElement('canvas'); chart4.appendChild(cv4); c4.appendChild(chart4);
 main.appendChild(c4);
 main.appendChild(el('div','section-title','Produzione'));
 var c5 = el('div','card'); c5.appendChild(el('h2',null,'Andamento produzione per sede'));
-c5.appendChild(el('div','help-tip','Clicca sui nomi nella legenda per nascondere/mostrare la linea di una sede.'));
+c5.appendChild(el('div','help-tip','Clicca sui nomi nella legenda per nascondere/mostrare la linea di una sede. Clicca un punto per aprire quel mese in quella sede.'));
 var chart5 = el('div','chart-wrap'); chart5.style.height='380px'; var cv5=document.createElement('canvas'); chart5.appendChild(cv5); c5.appendChild(chart5);
 main.appendChild(c5);
 setTimeout(function(){
@@ -1883,19 +1967,24 @@ new Chart(cv1,{type:'bar',data:{labels:MONTHS_SHORT,datasets:[
 {label:'Fatturato', data:ce.rows.map(function(r){return r.fatt;}), backgroundColor:'#2F8F9E'},
 {label:'Costi fissi', data:ce.rows.map(function(r){return r.fissi;}), backgroundColor:'#c0483f'},
 {label:'Costi variabili', data:ce.rows.map(function(r){return r.vari;}), backgroundColor:'#A36EA6'}
-]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},
+onClick:function(evt,elems){ if(elems.length){ navigateToMonthData(STATE.currentYear, elems[0].index, null); } }}});
 new Chart(cv2,{type:'doughnut',data:{labels:['Costi fissi','Costi variabili'],datasets:[{data:[scost.totFixedProiezione,scost.totVarProiezione],backgroundColor:['#3B2647','#2F8F9E']}]},
-options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},
+onClick:function(evt,elems){ if(elems.length){ navigateToBudgetSite('TOTAL'); } }}});
 new Chart(cv3,{type:'bar',data:{labels:budget.perSite.map(function(p){return p.siteName;}),datasets:[{label:'Budget annuo costi fissi',data:budget.perSite.map(function(p){return p.totFixedMese*12;}),backgroundColor:'#A36EA6'}]},
-options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},indexAxis:'y'}});
+options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},indexAxis:'y',
+onClick:function(evt,elems){ if(elems.length){ navigateToBudgetSite(budget.perSite[elems[0].index].siteId); } }}});
 var histSeries = buildHistoricalMonthlySeries();
 new Chart(cv3b,{type:'line',data:{labels:histSeries.labels,datasets:[
 {label:'Fatturato', data:histSeries.revenue, borderColor:'#2F8F9E', backgroundColor:'#2F8F9E', fill:false, tension:.2, pointRadius:2},
 {label:'Produzione', data:histSeries.produzione, borderColor:'#A36EA6', backgroundColor:'#A36EA6', fill:false, tension:.2, pointRadius:2}
-]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},
+onClick:function(evt,elems){ if(elems.length){ var p=histSeries.points[elems[0].index]; navigateToMonthData(p.year, p.month, null); } }}});
 new Chart(cv3c,{type:'line',data:{labels:histSeries.labels,datasets:[
 {label:'Liquidit\u00e0 totale', data:histSeries.liquidity, borderColor:'#3f8f5c', backgroundColor:'rgba(63,143,92,.15)', fill:true, tension:.2, pointRadius:2}
-]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+onClick:function(evt,elems){ if(elems.length){ var p=histSeries.points[elems[0].index]; navigateToLiquidityData(p.year, p.month); } }}});
 var siteColors4 = ['#2F8F9E','#3B2647','#A36EA6','#c0483f','#3f8f5c','#F1E44D','#5A3D68','#e07b39','#4a90d9','#9b59b6'];
 var dsRev = [], dsProd = [];
 STATE.sites.forEach(function(s,idx){
@@ -1903,14 +1992,86 @@ var color = siteColors4[idx % siteColors4.length];
 dsRev.push({label:s.name, data:MONTHS.map(function(_,m){return consRevenueMonthSite(s.id,m);}), borderColor:color, backgroundColor:color, fill:false, tension:.25});
 dsProd.push({label:s.name, data:MONTHS.map(function(_,m){return consProduzioneMonthSite(s.id,m);}), borderColor:color, backgroundColor:color, fill:false, tension:.25});
 });
-new Chart(cv4,{type:'line',data:{labels:MONTHS_SHORT,datasets:dsRev},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
-new Chart(cv5,{type:'line',data:{labels:MONTHS_SHORT,datasets:dsProd},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+new Chart(cv4,{type:'line',data:{labels:MONTHS_SHORT,datasets:dsRev},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},
+onClick:function(evt,elems){ if(elems.length){ navigateToMonthData(STATE.currentYear, elems[0].index, STATE.sites[elems[0].datasetIndex].id); } }}});
+new Chart(cv5,{type:'line',data:{labels:MONTHS_SHORT,datasets:dsProd},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},
+onClick:function(evt,elems){ if(elems.length){ navigateToMonthData(STATE.currentYear, elems[0].index, STATE.sites[elems[0].datasetIndex].id); } }}});
 },0);
 if(mc===0){
 var note = el('div','notebox','&#9888;&#65039; Non hai ancora inserito dati nel Consuntivo Mensile: gli scostamenti e le proiezioni sono a zero finch\u00e9 non compili almeno un mese.');
 main.insertBefore(note, kpis);
 }
-};
+}
+function renderDashboardSite(main, siteId){
+var site = findSite(siteId);
+var scost = scostamentiSummary(siteId);
+var calcB = calcBudgetSite(siteId);
+var mc = scost.mc;
+var fattArr = MONTHS.map(function(_,m){ return consRevenueMonthSite(siteId,m); });
+var fissiArr = MONTHS.map(function(_,m){ return consFixedTotalMonthSite(siteId,m); });
+var variArr = MONTHS.map(function(_,m){ return consVarTotalMonthSite(siteId,m); });
+var risNetto = sum(fattArr)-sum(fissiArr)-sum(variArr);
+var kpis = el('div','kpi-grid');
+function kpi(label,value,sub,subclass){
+var k = el('div','kpi'); k.appendChild(el('div','label',label)); k.appendChild(el('div','value',value));
+if(sub) k.appendChild(el('div','sub '+(subclass||''),sub));
+return k;
+}
+kpis.appendChild(kpi('Fatturato incassato (YTD) &mdash; '+site.name, fmtEUR(scost.fatturatoYtd), mc+' mesi compilati'));
+kpis.appendChild(kpi('Proiezione fatturato annuo', fmtEUR(scost.fatturatoProiezione)));
+kpis.appendChild(kpi('Risultato netto (YTD)', fmtEUR(risNetto), risNetto>=0?'in utile':'in perdita', risNetto>=0?'pos':'neg'));
+kpis.appendChild(kpi('Budget costi fissi annuo', fmtEUR(calcB.totFixedMese*12)));
+kpis.appendChild(kpi('Incidenza costi fissi/FT', fmtPct(scost.incFissiMedia), 'media periodo compilato'));
+kpis.appendChild(kpi('MDC % media', fmtPct(scost.mdcPctMedia)));
+kpis.appendChild(kpi('Nuovo BEP annuo stimato', fmtEUR(scost.nuovoBepAnnuo)));
+kpis.appendChild(kpi('Target mensile', fmtEUR(calcB.targetMese)));
+main.appendChild(kpis);
+var two = el('div','two-col');
+var c1 = el('div','card'); c1.appendChild(el('h2',null,'Fatturato vs Costi &mdash; mese per mese'));
+c1.appendChild(el('div','help-tip','Clicca una colonna per aprire il Consuntivo mensile di quel mese, per questa sede.'));
+var chart1 = el('div','chart-wrap'); var cv1=document.createElement('canvas'); chart1.appendChild(cv1); c1.appendChild(chart1);
+two.appendChild(c1);
+var c2 = el('div','card'); c2.appendChild(el('h2',null,'Composizione costi (proiezione annua)'));
+c2.appendChild(el('div','help-tip','Clicca una fetta per aprire Budget costi di questa sede.'));
+var chart2 = el('div','chart-wrap'); var cv2=document.createElement('canvas'); chart2.appendChild(cv2); c2.appendChild(chart2);
+two.appendChild(c2);
+main.appendChild(two);
+main.appendChild(el('div','section-title','Fatturato'));
+var c4 = el('div','card'); c4.appendChild(el('h2',null,'Andamento fatturato'));
+c4.appendChild(el('div','help-tip','Clicca un punto per aprire quel mese nel Consuntivo mensile.'));
+var chart4 = el('div','chart-wrap'); chart4.style.height='320px'; var cv4=document.createElement('canvas'); chart4.appendChild(cv4); c4.appendChild(chart4);
+main.appendChild(c4);
+main.appendChild(el('div','section-title','Produzione'));
+var c5 = el('div','card'); c5.appendChild(el('h2',null,'Andamento produzione'));
+c5.appendChild(el('div','help-tip','Clicca un punto per aprire quel mese nel Consuntivo mensile.'));
+var chart5 = el('div','chart-wrap'); chart5.style.height='320px'; var cv5=document.createElement('canvas'); chart5.appendChild(cv5); c5.appendChild(chart5);
+main.appendChild(c5);
+setTimeout(function(){
+new Chart(cv1,{type:'bar',data:{labels:MONTHS_SHORT,datasets:[
+{label:'Fatturato', data:fattArr, backgroundColor:'#2F8F9E'},
+{label:'Costi fissi', data:fissiArr, backgroundColor:'#c0483f'},
+{label:'Costi variabili', data:variArr, backgroundColor:'#A36EA6'}
+]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},
+onClick:function(evt,elems){ if(elems.length){ navigateToMonthData(STATE.currentYear, elems[0].index, siteId); } }}});
+var projFattura = safeDiv(sum(fattArr), Math.max(mc,1))*12;
+var totFissiAnno = calcB.totFixedMese*12;
+var totVarAnno = safeDiv(sum(variArr), Math.max(mc,1))*12;
+new Chart(cv2,{type:'doughnut',data:{labels:['Costi fissi','Costi variabili'],datasets:[{data:[totFissiAnno,totVarAnno],backgroundColor:['#3B2647','#2F8F9E']}]},
+options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},
+onClick:function(evt,elems){ if(elems.length){ navigateToBudgetSite(siteId); } }}});
+new Chart(cv4,{type:'line',data:{labels:MONTHS_SHORT,datasets:[{label:site.name, data:fattArr, borderColor:'#2F8F9E', backgroundColor:'#2F8F9E', fill:false, tension:.25}]},
+options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+onClick:function(evt,elems){ if(elems.length){ navigateToMonthData(STATE.currentYear, elems[0].index, siteId); } }}});
+var prodArr = MONTHS.map(function(_,m){ return consProduzioneMonthSite(siteId,m); });
+new Chart(cv5,{type:'line',data:{labels:MONTHS_SHORT,datasets:[{label:site.name, data:prodArr, borderColor:'#A36EA6', backgroundColor:'#A36EA6', fill:false, tension:.25}]},
+options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+onClick:function(evt,elems){ if(elems.length){ navigateToMonthData(STATE.currentYear, elems[0].index, siteId); } }}});
+},0);
+if(mc===0){
+var note = el('div','notebox','&#9888;&#65039; Non hai ancora inserito dati nel Consuntivo Mensile per questa sede: le proiezioni sono a zero finch\u00e9 non compili almeno un mese.');
+main.insertBefore(note, kpis);
+}
+}
 function iconBtn(symbol, title, onClick){
 var b = document.createElement('button');
 b.className='icon-btn'; b.title=title||''; b.innerHTML=symbol; b.type='button';
@@ -2424,7 +2585,7 @@ var t0 = document.createElement('table'); t0.className='datatable';
 var h0 = '<tr><th>Voce</th>'+MONTHS_SHORT.map(function(m){return '<th>'+m+'</th>';}).join('')+'<th>Totale</th></tr>';
 var tds0 = '<td>Tot. fatturato incassato</td>';
 var totRev=0;
-for(var m=0;m<12;m++){ var v=consRevenueMonthAll(m); totRev+=v; tds0 += '<td>'+fmtEUR(v)+'</td>'; }
+for(var m=0;m<12;m++){ var v=consRevenueMonthAll(m); totRev+=v; tds0 += '<td data-m="'+m+'">'+fmtEUR(v)+'</td>'; }
 tds0 += '<td><b>'+fmtEUR(totRev)+'</b></td>';
 t0.innerHTML = '<thead>'+h0+'</thead><tbody><tr>'+tds0+'</tr></tbody>';
 wrap0.appendChild(t0); card0.appendChild(wrap0);
@@ -2436,7 +2597,7 @@ var tPT = document.createElement('table'); tPT.className='datatable';
 var hPT = '<tr><th>Voce</th>'+MONTHS_SHORT.map(function(m){return '<th>'+m+'</th>';}).join('')+'<th>Totale</th></tr>';
 var tdsPT = '<td>Valore produzione</td>';
 var totProd=0;
-for(var mpt=0;mpt<12;mpt++){ var vp=consProduzioneMonthAll(mpt); totProd+=vp; tdsPT += '<td>'+fmtEUR(vp)+'</td>'; }
+for(var mpt=0;mpt<12;mpt++){ var vp=consProduzioneMonthAll(mpt); totProd+=vp; tdsPT += '<td data-m="'+mpt+'">'+fmtEUR(vp)+'</td>'; }
 tdsPT += '<td><b>'+fmtEUR(totProd)+'</b></td>';
 tPT.innerHTML = '<thead>'+hPT+'</thead><tbody><tr>'+tdsPT+'</tr></tbody>';
 wrapPT.appendChild(tPT); cardProdTot.appendChild(wrapPT);
@@ -3104,7 +3265,7 @@ body2 += '<td id="rowavg_'+a.id+'">'+fmtEUR(safeDiv(sum(arr),12))+'</td>';
 body2 += '<td><span class="cat-actions"></span></td></tr>';
 });
 var totRow = '<tr class="total-row"><td>Totale liquidit\u00e0</td>';
-for(var mt=0; mt<12; mt++){ totRow += '<td id="banktot_'+mt+'"><b>'+fmtEUR(bankTotalMonth(viewYear,mt))+'</b></td>'; }
+for(var mt=0; mt<12; mt++){ totRow += '<td id="banktot_'+mt+'" data-m="'+mt+'"><b>'+fmtEUR(bankTotalMonth(viewYear,mt))+'</b></td>'; }
 totRow += '<td></td><td></td></tr>';
 table2.innerHTML = '<thead>'+head2+'</thead><tbody>'+body2+totRow+'</tbody>';
 wrap2.appendChild(table2); card2.appendChild(wrap2);
@@ -3366,6 +3527,7 @@ if(urlParams.get('checkout')) checkoutResult = urlParams.get('checkout');
 }catch(e){}
 startInactivityWatcher();
 bootApp();
+
 
 
 
