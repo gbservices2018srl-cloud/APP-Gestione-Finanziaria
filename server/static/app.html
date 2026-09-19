@@ -282,6 +282,7 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 
 
 
+
 var MONTHS = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 var MONTHS_SHORT = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 var FIXED_ITEMS_SEED = JSON.parse(document.getElementById('fixedItemsData').textContent);
@@ -1267,7 +1268,8 @@ var PAGES = [
 {id:'listino', label:'Listino & margini', icon:'&#129513;'},
 {id:'contoeconomico', label:'Conto economico', icon:'&#128203;'},
 {id:'statistiche', label:'Statistiche storiche', icon:'&#128202;'},
-{id:'dati', label:'Impostazioni e Backup', icon:'&#128190;'}
+{id:'dati', label:'Impostazioni e Backup', icon:'&#128190;'},
+{id:'assistenza', label:'Assistenza', icon:'&#128172;'}
 ];
 var currentPage = 'dashboard';
 var currentBudgetSite = null;
@@ -3321,6 +3323,50 @@ render();
 resetCard.appendChild(resetBtn);
 main.appendChild(resetCard);
 };
+
+RENDERERS.assistenza = function(main){
+main.appendChild(el('h1','pagetitle','Assistenza'));
+main.appendChild(el('p','pagesub','Hai un problema o una domanda? Scrivici: la richiesta arriva direttamente a chi gestisce il servizio.'));
+var card = el('div','card');
+var nameRow = el('div','input-row');
+nameRow.appendChild(el('label',null,'Nome'));
+var nameInp = document.createElement('input'); nameInp.type='text'; nameInp.style.width='220px';
+nameRow.appendChild(nameInp);
+card.appendChild(nameRow);
+var surnameRow = el('div','input-row');
+surnameRow.appendChild(el('label',null,'Cognome'));
+var surnameInp = document.createElement('input'); surnameInp.type='text'; surnameInp.style.width='220px';
+surnameRow.appendChild(surnameInp);
+card.appendChild(surnameRow);
+var noteRow = el('div','input-row');
+noteRow.appendChild(el('label',null,'Descrivi la richiesta'));
+var noteInp = document.createElement('textarea'); noteInp.rows=6; noteInp.style.width='100%'; noteInp.style.maxWidth='500px'; noteInp.placeholder='Scrivi qui il problema o la domanda...';
+noteRow.appendChild(noteInp);
+card.appendChild(noteRow);
+var msgBox = el('div',null,'');
+card.appendChild(msgBox);
+var sendBtn = el('button','btn','Invia richiesta');
+sendBtn.onclick = async function(){
+msgBox.innerHTML = '';
+var nome = nameInp.value.trim(), cognome = surnameInp.value.trim(), note = noteInp.value.trim();
+if(!nome || !cognome){ msgBox.appendChild(el('div','notebox','Inserisci nome e cognome.')); return; }
+if(!note){ msgBox.appendChild(el('div','notebox','Scrivi una descrizione della richiesta.')); return; }
+sendBtn.disabled = true; sendBtn.textContent = 'Invio...';
+var r = await apiSend('/api/company/support-request','POST',{nome:nome, cognome:cognome, note:note});
+sendBtn.disabled = false; sendBtn.textContent = 'Invia richiesta';
+if(r.ok){
+nameInp.value=''; surnameInp.value=''; noteInp.value='';
+msgBox.innerHTML='';
+msgBox.appendChild(el('div','notebox','Richiesta inviata. Ti risponderemo il prima possibile.'));
+} else {
+msgBox.innerHTML='';
+msgBox.appendChild(el('div','notebox',(r.data&&r.data.error)||'Errore nell\u2019invio, riprova tra poco.'));
+}
+};
+card.appendChild(sendBtn);
+main.appendChild(card);
+};
+
 RENDERERS.dati = function(main){
 main.appendChild(el('h1','pagetitle','Impostazioni e Backup'));
 main.appendChild(el('p','pagesub','Gestisci il tuo abbonamento, l\u2019account e i dati della tua azienda.'));
@@ -3527,6 +3573,7 @@ if(urlParams.get('checkout')) checkoutResult = urlParams.get('checkout');
 }catch(e){}
 startInactivityWatcher();
 bootApp();
+
 
 
 
