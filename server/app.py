@@ -655,6 +655,41 @@ def cancel_subscription():
     return jsonify({"ok": True})
 
 
+@app.route("/api/company/support-request", methods=["POST"])
+def support_request():
+    if not require_company():
+        return json_error("Non autorizzato.", 401)
+    ok, err = check_company_access()
+    if not ok:
+        return err
+    body = request.get_json(force=True, silent=True) or {}
+    nome = (body.get("nome") or "").strip()
+    cognome = (body.get("cognome") or "").strip()
+    note = (body.get("note") or "").strip()
+    if not nome or not cognome:
+        return json_error("Inserisci nome e cognome.")
+    if not note:
+        return json_error("Scrivi una descrizione della richiesta.")
+    db = get_db()
+    row = db.execute(
+        "SELECT name, email FROM companies WHERE id=?", (session["company_id"],)
+    ).fetchone()
+    company_name = row["name"] if row else "azienda sconosciuta"
+    company_email = row["email"] if row and row["email"] else "nessuna email registrata"
+    sent = send_email_safe(
+        get_admin_notify_email(),
+        "Richiesta di assistenza - " + company_name,
+        "Nuova richiesta di assistenza dall'app:\n\n"
+        "Azienda: " + company_name + "\n"
+        "Email azienda: " + company_email + "\n"
+        "Richiesta di: " + nome + " " + cognome + "\n\n"
+        "Note:\n" + note
+    )
+    if not sent:
+        return json_error("Impossibile inviare la richiesta al momento. Riprova tra poco o contatta direttamente l'assistenza.", 500)
+    return jsonify({"ok": True})
+
+
 @app.route("/api/stripe/webhook", methods=["POST"])
 def stripe_webhook():
     if stripe is None:
