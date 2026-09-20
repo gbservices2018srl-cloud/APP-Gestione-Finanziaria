@@ -283,6 +283,8 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 
 
 
+
+
 var MONTHS = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 var MONTHS_SHORT = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 var FIXED_ITEMS_SEED = JSON.parse(document.getElementById('fixedItemsData').textContent);
@@ -606,8 +608,10 @@ var showForgotPassword = false;
 var showRegister = false;
 var registerSent = false;
 var registerStep = 'form';
-var pendingReg = {name:'', email:'', phone:'', password:''};
+var pendingReg = {name:'', email:'', phone:'', password:'', acceptedPrivacy:false};
 var checkoutResult = null;
+var legalPageView = null;
+var legalPageReturnTo = null;
 var resetToken = null;
 var resetDone = false;
 var forgotPasswordSent = false;
@@ -1333,6 +1337,10 @@ if(checkoutResult && !isLoggedIn){
 renderCheckoutResultScreen(main);
 return;
 }
+if(legalPageView && !isLoggedIn){
+renderLegalPage(main);
+return;
+}
 if(!isLoggedIn){
 renderLoginScreen(main);
 return;
@@ -1423,6 +1431,102 @@ wrap.appendChild(box);
 main.appendChild(wrap);
 }
 
+/* ============================================================
+   ATTENZIONE: questo e' un TESTO DI BOZZA, pensato come punto di
+   partenza tecnico. Va fatto rivedere e completato da un
+   consulente privacy o avvocato prima di considerarlo definitivo,
+   in particolare per i campi segnati [DA COMPLETARE].
+   ============================================================ */
+var PRIVACY_POLICY_HTML = ''
++ '<p><b>Bozza \u2014 da far rivedere da un professionista prima della pubblicazione definitiva.</b></p>'
++ '<p>Ai sensi degli articoli 13 e 14 del Regolamento (UE) 2016/679 (GDPR).</p>'
++ '<h3>1. Titolare del trattamento</h3>'
++ '<p>Consulting Sardegna Srl \u2014 [DA COMPLETARE: sede legale, P.IVA, email di contatto per la privacy].</p>'
++ '<h3>2. Dati raccolti</h3>'
++ '<p><b>Dati di registrazione:</b> nome dell\u2019azienda, indirizzo email, numero di telefono (facoltativo), password (conservata sempre in forma cifrata, mai leggibile).<br>'
++ '<b>Dati di pagamento:</b> gestiti direttamente dal nostro fornitore Stripe; non conserviamo i dati della carta di credito sui nostri sistemi.<br>'
++ '<b>Dati gestionali inseriti nell\u2019app:</b> le informazioni finanziarie della tua attivit\u00e0 (fatturato, costi, budget) che inserisci volontariamente per usare il servizio.<br>'
++ '<b>Dati tecnici:</b> indirizzo IP, log di accesso, cookie di sessione strettamente necessari al funzionamento (nessun cookie di profilazione o pubblicitario).</p>'
++ '<h3>3. Finalit\u00e0 e base giuridica</h3>'
++ '<p>Erogazione del servizio e gestione dell\u2019account: esecuzione del contratto.<br>'
++ 'Fatturazione e adempimenti fiscali: obbligo di legge.<br>'
++ 'Comunicazioni relative al servizio (conferme, avvisi, assistenza): esecuzione del contratto.<br>'
++ 'Eventuali comunicazioni promozionali: solo con consenso specifico, facoltativo e revocabile in ogni momento.</p>'
++ '<h3>4. Destinatari dei dati (responsabili del trattamento)</h3>'
++ '<p>I dati possono essere trattati da fornitori terzi che agiscono come responsabili del trattamento per nostro conto: Stripe Inc. (pagamenti), Render Services Inc. (hosting), Google LLC (invio email). [DA VERIFICARE: che siano in essere i relativi accordi di trattamento dati/DPA con ciascun fornitore].</p>'
++ '<h3>5. Trasferimento dati extra-UE</h3>'
++ '<p>Alcuni fornitori indicati potrebbero trattare dati al di fuori dello Spazio Economico Europeo. In tal caso il trasferimento avviene sulla base di clausole contrattuali standard approvate dalla Commissione Europea o di altre garanzie equivalenti.</p>'
++ '<h3>6. Periodo di conservazione</h3>'
++ '<p>I dati sono conservati per la durata del rapporto contrattuale e, successivamente, per il tempo previsto dagli obblighi di legge (i dati fiscali/contabili vanno tipicamente conservati per 10 anni).</p>'
++ '<h3>7. Diritti dell\u2019interessato</h3>'
++ '<p>In ogni momento puoi richiedere: accesso ai tuoi dati, rettifica, cancellazione, limitazione del trattamento, portabilit\u00e0, opposizione. Scrivi a [DA COMPLETARE: email]. Hai inoltre diritto di reclamo al Garante per la Protezione dei Dati Personali (garanteprivacy.it).</p>'
++ '<h3>8. Modifiche</h3>'
++ '<p>Questa informativa pu\u00f2 essere aggiornata nel tempo. La versione pi\u00f9 recente \u00e8 sempre disponibile in questa pagina.</p>';
+
+var TERMS_OF_SERVICE_HTML = ''
++ '<p><b>Bozza \u2014 da far rivedere da un professionista prima della pubblicazione definitiva.</b></p>'
++ '<h3>1. Oggetto</h3>'
++ '<p>I presenti Termini regolano l\u2019utilizzo del servizio fornito da Consulting Sardegna Srl [DA COMPLETARE: P.IVA, sede legale].</p>'
++ '<h3>2. Piani e prezzi</h3>'
++ '<p>Il servizio \u00e8 offerto in modalit\u00e0 Gratuita (funzioni limitate) e Completa a pagamento (29 &euro;/mese, [DA COMPLETARE: IVA inclusa o esclusa]), rinnovata automaticamente ogni mese fino a disdetta.</p>'
++ '<h3>3. Registrazione e account</h3>'
++ '<p>Per usare il servizio \u00e8 necessario registrarsi fornendo dati veritieri. Sei responsabile della riservatezza delle tue credenziali di accesso.</p>'
++ '<h3>4. Pagamento e fatturazione</h3>'
++ '<p>I pagamenti sono elaborati tramite Stripe. L\u2019abbonamento si rinnova automaticamente ogni mese fino a disdetta.</p>'
++ '<h3>5. Disdetta</h3>'
++ '<p>Puoi disdire l\u2019abbonamento in qualsiasi momento dalla sezione "Impostazioni e Backup". Il piano completo resta attivo fino al termine del periodo gi\u00e0 pagato; non sono previsti rimborsi per periodi parziali, salvo diversa indicazione di legge.</p>'
++ '<h3>6. Approvazione dell\u2019account</h3>'
++ '<p>Ogni nuova registrazione \u00e8 soggetta ad approvazione da parte del Titolare del servizio.</p>'
++ '<h3>7. Limitazione di responsabilit\u00e0</h3>'
++ '<p>Il servizio viene fornito "cos\u00ec com\u2019\u00e8". Pur impegnandoci a garantirne la continuit\u00e0 e l\u2019accuratezza, non garantiamo l\u2019assenza di interruzioni o errori e non siamo responsabili per decisioni economiche prese sulla base dei dati elaborati dall\u2019app, che restano sotto la responsabilit\u00e0 dell\u2019utente.</p>'
++ '<h3>8. Sospensione e cessazione dell\u2019account</h3>'
++ '<p>Ci riserviamo il diritto di sospendere o cessare un account in caso di violazione dei presenti Termini, mancato pagamento, o uso improprio del servizio.</p>'
++ '<h3>9. Legge applicabile e foro competente</h3>'
++ '<p>I presenti Termini sono regolati dalla legge italiana. Per ogni controversia \u00e8 competente il foro di [DA COMPLETARE].</p>'
++ '<h3>10. Modifiche</h3>'
++ '<p>Ci riserviamo il diritto di modificare i presenti Termini, dandone comunicazione agli utenti.</p>';
+
+var legalContentCache = null;
+async function fetchLegalContent(){
+try{
+var r = await apiGet('/api/legal-content');
+if(r.ok && r.data){ legalContentCache = {privacyHtml: r.data.privacyHtml, termsHtml: r.data.termsHtml}; return; }
+}catch(e){}
+legalContentCache = {privacyHtml: PRIVACY_POLICY_HTML, termsHtml: TERMS_OF_SERVICE_HTML};
+}
+function renderLegalPage(main){
+var isPrivacy = legalPageView==='privacy';
+var wrap = el('div','auth-wrap');
+wrap.style.maxWidth = '760px';
+var box = el('div','auth-box');
+box.style.textAlign = 'left';
+box.appendChild(el('h1','pagetitle', isPrivacy ? 'Informativa Privacy' : 'Termini di Servizio'));
+box.appendChild(el('div','notebox','&#9888;&#65039; <b>Documento in bozza</b>: valido come struttura tecnica, ma va completato e fatto rivedere da un consulente privacy o da un avvocato prima di essere considerato definitivo.'));
+var content = el('div',null,'');
+content.style.fontSize = '13.5px';
+content.style.lineHeight = '1.6';
+if(legalContentCache){
+content.innerHTML = isPrivacy ? legalContentCache.privacyHtml : legalContentCache.termsHtml;
+} else {
+content.innerHTML = '<p>Caricamento...</p>';
+var viewAtRequestTime = legalPageView;
+fetchLegalContent().then(function(){
+if(legalPageView===viewAtRequestTime) render();
+});
+}
+box.appendChild(content);
+var backBtn = el('button','btn secondary','&larr; Indietro');
+backBtn.style.marginTop = '18px';
+backBtn.onclick = function(){
+legalPageView = null;
+if(legalPageReturnTo==='register'){ showRegister = true; }
+legalPageReturnTo = null;
+render();
+};
+box.appendChild(backBtn);
+wrap.appendChild(box);
+main.appendChild(wrap);
+}
 function renderResetPasswordScreen(main){
 var wrap = el('div','auth-wrap');
 var box = el('div','auth-box');
@@ -1488,7 +1592,7 @@ var freeBtn = el('button','btn secondary','Scegli Gratuito');
 freeBtn.onclick = async function(){
 loginError='';
 freeBtn.disabled = true; freeBtn.textContent='Un momento...';
-var r = await apiSend('/api/company/register','POST',{name:pendingReg.name, email:pendingReg.email, phone:pendingReg.phone, password:pendingReg.password});
+var r = await apiSend('/api/company/register','POST',{name:pendingReg.name, email:pendingReg.email, phone:pendingReg.phone, password:pendingReg.password, acceptedPrivacy:pendingReg.acceptedPrivacy});
 if(r.ok){ registerSent = true; render(); }
 else { loginError = (r.data&&r.data.error)||'Errore, riprova.'; registerStep='form'; render(); }
 };
@@ -1501,7 +1605,7 @@ var paidBtn = el('button','btn','Scegli il piano completo');
 paidBtn.onclick = async function(){
 loginError='';
 paidBtn.disabled = true; paidBtn.textContent='Un momento...';
-var r = await apiSend('/api/company/register','POST',{name:pendingReg.name, email:pendingReg.email, phone:pendingReg.phone, password:pendingReg.password});
+var r = await apiSend('/api/company/register','POST',{name:pendingReg.name, email:pendingReg.email, phone:pendingReg.phone, password:pendingReg.password, acceptedPrivacy:pendingReg.acceptedPrivacy});
 if(!r.ok){ loginError = (r.data&&r.data.error)||'Errore, riprova.'; registerStep='form'; render(); return; }
 var r2 = await apiSend('/api/company/create-checkout-session','POST',{companyId:r.data.id});
 if(r2.ok && r2.data && r2.data.url){ window.location.href = r2.data.url; }
@@ -1537,6 +1641,16 @@ rPwRow.appendChild(el('label',null,'Password'));
 var rPwInp = document.createElement('input'); rPwInp.type='password'; rPwInp.style.width='220px';
 rPwRow.appendChild(rPwInp);
 box.appendChild(rPwRow);
+var consentRow = document.createElement('div');
+consentRow.style.cssText = 'display:flex;align-items:flex-start;gap:8px;margin:14px 0;font-size:12.5px;';
+var consentCb = document.createElement('input'); consentCb.type='checkbox'; consentCb.id='privacyConsentCb'; consentCb.checked = !!pendingReg.acceptedPrivacy;
+consentCb.style.marginTop = '3px';
+var consentLabel = document.createElement('label');
+consentLabel.setAttribute('for','privacyConsentCb');
+consentLabel.innerHTML = 'Ho letto e accetto l\u2019<a href="#" id="privacyLinkA">Informativa Privacy</a> e i <a href="#" id="termsLinkA">Termini di Servizio</a>.';
+consentRow.appendChild(consentCb);
+consentRow.appendChild(consentLabel);
+box.appendChild(consentRow);
 if(loginError){ box.appendChild(el('div','notebox', loginError)); }
 var registerBtn = el('button','btn','Avanti');
 registerBtn.onclick = function(){
@@ -1544,7 +1658,8 @@ loginError='';
 if(!rNameInp.value.trim()){ loginError='Inserisci il nome della tua azienda.'; render(); return; }
 if(!rEmailInp.value.trim() || rEmailInp.value.indexOf('@')===-1){ loginError='Inserisci un\u2019email valida.'; render(); return; }
 if(rPwInp.value.length<4){ loginError='La password deve avere almeno 4 caratteri.'; render(); return; }
-pendingReg = {name:rNameInp.value.trim(), email:rEmailInp.value.trim(), phone:rPhoneInp.value.trim(), password:rPwInp.value};
+if(!consentCb.checked){ loginError='Devi accettare l\u2019Informativa Privacy e i Termini di Servizio per procedere.'; render(); return; }
+pendingReg = {name:rNameInp.value.trim(), email:rEmailInp.value.trim(), phone:rPhoneInp.value.trim(), password:rPwInp.value, acceptedPrivacy:true};
 registerStep = 'planChoice';
 render();
 };
@@ -1555,6 +1670,14 @@ backBtn.onclick = function(){ showRegister=false; loginError=''; render(); };
 box.appendChild(backBtn);
 wrap.appendChild(box);
 main.appendChild(wrap);
+var privacyLinkEl = document.getElementById('privacyLinkA');
+if(privacyLinkEl) privacyLinkEl.onclick = function(ev){ ev.preventDefault();
+pendingReg = {name:rNameInp.value.trim(), email:rEmailInp.value.trim(), phone:rPhoneInp.value.trim(), password:rPwInp.value, acceptedPrivacy:consentCb.checked};
+legalPageView='privacy'; legalPageReturnTo='register'; legalContentCache=null; showRegister=false; render(); };
+var termsLinkEl = document.getElementById('termsLinkA');
+if(termsLinkEl) termsLinkEl.onclick = function(ev){ ev.preventDefault();
+pendingReg = {name:rNameInp.value.trim(), email:rEmailInp.value.trim(), phone:rPhoneInp.value.trim(), password:rPwInp.value, acceptedPrivacy:consentCb.checked};
+legalPageView='terms'; legalPageReturnTo='register'; legalContentCache=null; showRegister=false; render(); };
 }
 
 function renderLoginScreen(main){
@@ -1630,7 +1753,7 @@ box.appendChild(forgotLink);
 var registerLink = document.createElement('div');
 registerLink.style.cssText = 'margin-top:8px;text-align:center;';
 registerLink.innerHTML = '<a href="#" style="font-size:12.5px;color:var(--teal);">Non hai un account? Richiedine uno</a>';
-registerLink.querySelector('a').onclick = function(ev){ ev.preventDefault(); showRegister=true; registerStep='form'; pendingReg={name:'',email:'',phone:'',password:''}; loginError=''; render(); };
+registerLink.querySelector('a').onclick = function(ev){ ev.preventDefault(); showRegister=true; registerStep='form'; pendingReg={name:'',email:'',phone:'',password:'',acceptedPrivacy:false}; loginError=''; render(); };
 box.appendChild(registerLink);
 wrap.appendChild(box);
 main.appendChild(wrap);
@@ -3573,6 +3696,8 @@ if(urlParams.get('checkout')) checkoutResult = urlParams.get('checkout');
 }catch(e){}
 startInactivityWatcher();
 bootApp();
+
+
 
 
 

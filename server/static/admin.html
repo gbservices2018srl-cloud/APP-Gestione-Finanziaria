@@ -47,6 +47,7 @@ pre.datajson{background:#1e2a30; color:#d7e6e4; padding:14px; border-radius:8px;
 <script>
 
 
+
 async function apiGet(p){ var r = await fetch(p,{credentials:'include'}); var d=null; try{d=await r.json();}catch(e){} return {ok:r.ok,data:d}; }
 async function apiSend(p,m,b){ var r = await fetch(p,{method:m,credentials:'include',headers:{'Content-Type':'application/json'},body:b!==undefined?JSON.stringify(b):undefined}); var d=null; try{d=await r.json();}catch(e){} return {ok:r.ok,data:d}; }
 var view = 'loading';
@@ -54,17 +55,24 @@ var companies = [];
 var resetRequests = [];
 var errMsg = '';
 var viewingData = null;
+var legalPrivacyText = '';
+var legalTermsText = '';
+var legalSaveMsg = '';
 function el(tag,cls,html){ var e=document.createElement(tag); if(cls)e.className=cls; if(html!==undefined)e.innerHTML=html; return e; }
 async function boot(){
 var status = await apiGet('/api/admin/status');
 if(!status.ok){ view='login'; errMsg='Impossibile contattare il server.'; render(); return; }
 if(!status.data.configured){ view='setup'; render(); return; }
-if(status.data.loggedIn){ await loadCompanies(); await loadResetRequests(); view='panel'; render(); return; }
+if(status.data.loggedIn){ await loadCompanies(); await loadResetRequests(); await loadLegalContent(); view='panel'; render(); return; }
 view='login'; render();
 }
 async function loadCompanies(){
 var r = await apiGet('/api/admin/companies');
 if(r.ok) companies = r.data.companies || [];
+}
+async function loadLegalContent(){
+var r = await apiGet('/api/admin/legal-content');
+if(r.ok){ legalPrivacyText = r.data.privacyText || ''; legalTermsText = r.data.termsText || ''; }
 }
 async function loadResetRequests(){
 var r = await apiGet('/api/admin/password-reset-requests');
@@ -192,6 +200,32 @@ reqCard.appendChild(row);
 });
 frag.appendChild(reqCard);
 }
+
+var legalCard = el('div','card');
+legalCard.appendChild(el('h2',null,'Contenuti legali'));
+legalCard.appendChild(el('div','help-tip','Scrivi qui il testo di Informativa Privacy e Termini di Servizio: quello che vedono i clienti in fase di registrazione. Lascia una riga vuota tra un paragrafo e l\u2019altro: verr\u00e0 formattato da solo. Nessun tag HTML necessario.'));
+legalCard.appendChild(el('label',null,'<b>Informativa Privacy</b>'));
+var privacyTa = document.createElement('textarea');
+privacyTa.value = legalPrivacyText;
+privacyTa.style.cssText = 'width:100%;min-height:220px;font-family:inherit;font-size:12.5px;padding:10px;border:1px solid var(--border,#ddd);border-radius:8px;margin:6px 0 16px;box-sizing:border-box;';
+legalCard.appendChild(privacyTa);
+legalCard.appendChild(el('label',null,'<b>Termini di Servizio</b>'));
+var termsTa = document.createElement('textarea');
+termsTa.value = legalTermsText;
+termsTa.style.cssText = 'width:100%;min-height:220px;font-family:inherit;font-size:12.5px;padding:10px;border:1px solid var(--border,#ddd);border-radius:8px;margin:6px 0 16px;box-sizing:border-box;';
+legalCard.appendChild(termsTa);
+if(legalSaveMsg) legalCard.appendChild(el('div','notice',legalSaveMsg));
+var saveLegalBtn = el('button','btn','Salva contenuti legali');
+saveLegalBtn.onclick = async function(){
+saveLegalBtn.disabled = true; saveLegalBtn.textContent = 'Salvo...';
+var r = await apiSend('/api/admin/legal-content','PUT',{privacyText:privacyTa.value, termsText:termsTa.value});
+saveLegalBtn.disabled = false; saveLegalBtn.textContent = 'Salva contenuti legali';
+legalSaveMsg = r.ok ? 'Salvato. I clienti vedranno subito il nuovo testo.' : ((r.data&&r.data.error)||'Errore nel salvataggio.');
+legalPrivacyText = privacyTa.value; legalTermsText = termsTa.value;
+render();
+};
+legalCard.appendChild(saveLegalBtn);
+frag.appendChild(legalCard);
 
 var pendingCompanies = companies.filter(function(c){ return !c.approved; });
 var approvedCompanies = companies.filter(function(c){ return c.approved; });
@@ -337,6 +371,7 @@ frag.appendChild(dataCard);
 return frag;
 }
 boot();
+
 
 
 </script>
