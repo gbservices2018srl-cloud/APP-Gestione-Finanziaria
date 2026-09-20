@@ -21,6 +21,7 @@ import uuid
 import secrets
 import smtplib
 import datetime
+import html as html_module
 from email.mime.text import MIMEText
 from flask import Flask, request, jsonify, session, g, send_from_directory
 try:
@@ -69,9 +70,16 @@ def init_db():
     db.execute(
         """CREATE TABLE IF NOT EXISTS admin_config (
             id INTEGER PRIMARY KEY CHECK (id = 1),
-            password_hash TEXT NOT NULL
+            password_hash TEXT NOT NULL,
+            privacy_policy_text TEXT,
+            terms_of_service_text TEXT
         )"""
     )
+    admin_cols = [r[1] for r in db.execute("PRAGMA table_info(admin_config)").fetchall()]
+    if "privacy_policy_text" not in admin_cols:
+        db.execute("ALTER TABLE admin_config ADD COLUMN privacy_policy_text TEXT")
+    if "terms_of_service_text" not in admin_cols:
+        db.execute("ALTER TABLE admin_config ADD COLUMN terms_of_service_text TEXT")
     db.execute(
         """CREATE TABLE IF NOT EXISTS companies (
             id TEXT PRIMARY KEY,
@@ -86,7 +94,8 @@ def init_db():
             approved INTEGER NOT NULL DEFAULT 1,
             phone TEXT,
             stripe_customer_id TEXT,
-            stripe_subscription_id TEXT
+            stripe_subscription_id TEXT,
+            privacy_accepted_at TEXT
         )"""
     )
     # migrazione sicura: se il database esisteva gia' (creato prima di questa
@@ -110,6 +119,8 @@ def init_db():
         db.execute("ALTER TABLE companies ADD COLUMN stripe_customer_id TEXT")
     if "stripe_subscription_id" not in existing_cols:
         db.execute("ALTER TABLE companies ADD COLUMN stripe_subscription_id TEXT")
+    if "privacy_accepted_at" not in existing_cols:
+        db.execute("ALTER TABLE companies ADD COLUMN privacy_accepted_at TEXT")
     db.execute(
         """CREATE TABLE IF NOT EXISTS password_reset_requests (
             id TEXT PRIMARY KEY,
@@ -172,6 +183,82 @@ def require_admin():
 
 def require_company():
     return session.get("role") == "company" and session.get("company_id")
+
+
+DEFAULT_PRIVACY_TEXT = """Bozza — da far rivedere da un consulente privacy o da un avvocato prima della pubblicazione definitiva.
+
+Informativa ai sensi degli articoli 13 e 14 del Regolamento (UE) 2016/679 (GDPR).
+
+1. Titolare del trattamento
+Consulting Sardegna Srl — [DA COMPLETARE: sede legale, P.IVA, email di contatto per la privacy].
+
+2. Dati raccolti
+Dati di registrazione: nome dell'azienda, indirizzo email, numero di telefono (facoltativo), password (conservata sempre in forma cifrata, mai leggibile).
+Dati di pagamento: gestiti direttamente dal nostro fornitore Stripe; non conserviamo i dati della carta di credito sui nostri sistemi.
+Dati gestionali inseriti nell'app: le informazioni finanziarie della tua attività (fatturato, costi, budget) che inserisci volontariamente per usare il servizio.
+Dati tecnici: indirizzo IP, log di accesso, cookie di sessione strettamente necessari al funzionamento (nessun cookie di profilazione o pubblicitario).
+
+3. Finalità e base giuridica
+Erogazione del servizio e gestione dell'account: esecuzione del contratto.
+Fatturazione e adempimenti fiscali: obbligo di legge.
+Comunicazioni relative al servizio (conferme, avvisi, assistenza): esecuzione del contratto.
+Eventuali comunicazioni promozionali: solo con consenso specifico, facoltativo e revocabile in ogni momento.
+
+4. Destinatari dei dati (responsabili del trattamento)
+I dati possono essere trattati da fornitori terzi che agiscono come responsabili del trattamento per nostro conto: Stripe Inc. (pagamenti), Render Services Inc. (hosting), Google LLC (invio email). [DA VERIFICARE: che siano in essere i relativi accordi di trattamento dati/DPA con ciascun fornitore].
+
+5. Trasferimento dati extra-UE
+Alcuni fornitori indicati potrebbero trattare dati al di fuori dello Spazio Economico Europeo. In tal caso il trasferimento avviene sulla base di clausole contrattuali standard approvate dalla Commissione Europea o di altre garanzie equivalenti.
+
+6. Periodo di conservazione
+I dati sono conservati per la durata del rapporto contrattuale e, successivamente, per il tempo previsto dagli obblighi di legge (i dati fiscali/contabili vanno tipicamente conservati per 10 anni).
+
+7. Diritti dell'interessato
+In ogni momento puoi richiedere: accesso ai tuoi dati, rettifica, cancellazione, limitazione del trattamento, portabilità, opposizione. Scrivi a [DA COMPLETARE: email]. Hai inoltre diritto di reclamo al Garante per la Protezione dei Dati Personali (garanteprivacy.it).
+
+8. Modifiche
+Questa informativa può essere aggiornata nel tempo. La versione più recente è sempre disponibile in questa pagina."""
+
+DEFAULT_TERMS_TEXT = """Bozza — da far rivedere da un consulente privacy o da un avvocato prima della pubblicazione definitiva.
+
+1. Oggetto
+I presenti Termini regolano l'utilizzo del servizio fornito da Consulting Sardegna Srl [DA COMPLETARE: P.IVA, sede legale].
+
+2. Piani e prezzi
+Il servizio è offerto in modalità Gratuita (funzioni limitate) e Completa a pagamento (29 EUR/mese, [DA COMPLETARE: IVA inclusa o esclusa]), rinnovata automaticamente ogni mese fino a disdetta.
+
+3. Registrazione e account
+Per usare il servizio è necessario registrarsi fornendo dati veritieri. Sei responsabile della riservatezza delle tue credenziali di accesso.
+
+4. Pagamento e fatturazione
+I pagamenti sono elaborati tramite Stripe. L'abbonamento si rinnova automaticamente ogni mese fino a disdetta.
+
+5. Disdetta
+Puoi disdire l'abbonamento in qualsiasi momento dalla sezione "Impostazioni e Backup". Il piano completo resta attivo fino al termine del periodo già pagato; non sono previsti rimborsi per periodi parziali, salvo diversa indicazione di legge.
+
+6. Approvazione dell'account
+Ogni nuova registrazione è soggetta ad approvazione da parte del Titolare del servizio.
+
+7. Limitazione di responsabilità
+Il servizio viene fornito "così com'è". Pur impegnandoci a garantirne la continuità e l'accuratezza, non garantiamo l'assenza di interruzioni o errori e non siamo responsabili per decisioni economiche prese sulla base dei dati elaborati dall'app, che restano sotto la responsabilità dell'utente.
+
+8. Sospensione e cessazione dell'account
+Ci riserviamo il diritto di sospendere o cessare un account in caso di violazione dei presenti Termini, mancato pagamento, o uso improprio del servizio.
+
+9. Legge applicabile e foro competente
+I presenti Termini sono regolati dalla legge italiana. Per ogni controversia è competente il foro di [DA COMPLETARE].
+
+10. Modifiche
+Ci riserviamo il diritto di modificare i presenti Termini, dandone comunicazione agli utenti."""
+
+
+def text_to_safe_html(text):
+    paragraphs = [p.strip() for p in (text or "").split("\n\n") if p.strip()]
+    parts = []
+    for p in paragraphs:
+        escaped = html_module.escape(p).replace("\n", "<br>")
+        parts.append("<p>" + escaped + "</p>")
+    return "".join(parts)
 
 
 def json_error(msg, code=400):
@@ -307,6 +394,49 @@ def admin_login():
 @app.route("/api/admin/logout", methods=["POST"])
 def admin_logout():
     session.clear()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/legal-content", methods=["GET"])
+def get_legal_content():
+    db = get_db()
+    row = db.execute(
+        "SELECT privacy_policy_text, terms_of_service_text FROM admin_config WHERE id=1"
+    ).fetchone()
+    privacy_text = (row["privacy_policy_text"] if row and row["privacy_policy_text"] else DEFAULT_PRIVACY_TEXT)
+    terms_text = (row["terms_of_service_text"] if row and row["terms_of_service_text"] else DEFAULT_TERMS_TEXT)
+    return jsonify({
+        "privacyHtml": text_to_safe_html(privacy_text),
+        "termsHtml": text_to_safe_html(terms_text)
+    })
+
+
+@app.route("/api/admin/legal-content", methods=["GET"])
+def admin_get_legal_content():
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    db = get_db()
+    row = db.execute(
+        "SELECT privacy_policy_text, terms_of_service_text FROM admin_config WHERE id=1"
+    ).fetchone()
+    privacy_text = (row["privacy_policy_text"] if row and row["privacy_policy_text"] else DEFAULT_PRIVACY_TEXT)
+    terms_text = (row["terms_of_service_text"] if row and row["terms_of_service_text"] else DEFAULT_TERMS_TEXT)
+    return jsonify({"privacyText": privacy_text, "termsText": terms_text})
+
+
+@app.route("/api/admin/legal-content", methods=["PUT"])
+def admin_set_legal_content():
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    body = request.get_json(force=True, silent=True) or {}
+    privacy_text = body.get("privacyText")
+    terms_text = body.get("termsText")
+    db = get_db()
+    if privacy_text is not None:
+        db.execute("UPDATE admin_config SET privacy_policy_text=? WHERE id=1", (privacy_text,))
+    if terms_text is not None:
+        db.execute("UPDATE admin_config SET terms_of_service_text=? WHERE id=1", (terms_text,))
+    db.commit()
     return jsonify({"ok": True})
 
 
@@ -546,21 +676,24 @@ def company_register():
     email = (body.get("email") or "").strip()
     phone = (body.get("phone") or "").strip()
     password = (body.get("password") or "").strip()
+    accepted_privacy = bool(body.get("acceptedPrivacy"))
     if not name:
         return json_error("Inserisci il nome della tua azienda.")
     if not email or "@" not in email:
         return json_error("Inserisci un indirizzo email valido.")
     if len(password) < 4:
         return json_error("La password deve avere almeno 4 caratteri.")
+    if not accepted_privacy:
+        return json_error("Devi accettare l'Informativa Privacy e i Termini di Servizio per registrarti.")
     db = get_db()
     existing = db.execute("SELECT id FROM companies WHERE name=?", (name,)).fetchone()
     if existing is not None:
         return json_error("Esiste gia' un account con questo nome azienda. Scegline un altro o contatta l'assistenza.")
     cid = uuid.uuid4().hex[:12]
     db.execute(
-        "INSERT INTO companies (id, name, email, phone, password_hash, created_at, data, suspended, expires_at, plan, approved) "
-        "VALUES (?,?,?,?,?,?,?,0,NULL,'free',0)",
-        (cid, name, email, phone or None, generate_password_hash(password), now_iso(), "{}")
+        "INSERT INTO companies (id, name, email, phone, password_hash, created_at, data, suspended, expires_at, plan, approved, privacy_accepted_at) "
+        "VALUES (?,?,?,?,?,?,?,0,NULL,'free',0,?)",
+        (cid, name, email, phone or None, generate_password_hash(password), now_iso(), "{}", now_iso())
     )
     db.commit()
     # riepilogo al cliente, mandato SOLO ora: e' l'unico momento in cui il
