@@ -48,6 +48,7 @@ pre.datajson{background:#1e2a30; color:#d7e6e4; padding:14px; border-radius:8px;
 
 
 
+
 async function apiGet(p){ var r = await fetch(p,{credentials:'include'}); var d=null; try{d=await r.json();}catch(e){} return {ok:r.ok,data:d}; }
 async function apiSend(p,m,b){ var r = await fetch(p,{method:m,credentials:'include',headers:{'Content-Type':'application/json'},body:b!==undefined?JSON.stringify(b):undefined}); var d=null; try{d=await r.json();}catch(e){} return {ok:r.ok,data:d}; }
 var view = 'loading';
@@ -332,13 +333,21 @@ newPhone = newPhone.trim();
 var r = await apiSend('/api/admin/companies/'+c.id+'/phone','PUT',{phone:newPhone});
 if(r.ok){ await loadCompanies(); render(); }
 };
+var billingBtn = el('button','small-btn', c.billing_ragione_sociale ? 'Dati fatturazione' : 'Fatturazione (nessun dato)');
+billingBtn.onclick = function(){
+if(!c.billing_ragione_sociale && !c.billing_piva && !c.billing_address){
+alert('Nessun dato di fatturazione ancora raccolto per "'+c.name+'". Vengono richiesti automaticamente al cliente al momento del pagamento del piano completo.');
+return;
+}
+alert('Dati di fatturazione per "'+c.name+'":\n\nRagione sociale: '+(c.billing_ragione_sociale||'non indicata')+'\nPartita IVA: '+(c.billing_piva||'non indicata')+'\nIndirizzo: '+(c.billing_address||'non indicato'));
+};
 var delBtn = el('button','small-btn danger','Elimina');
 delBtn.onclick = async function(){
 if(!confirm('Eliminare definitivamente "'+c.name+'" e tutti i suoi dati? Non si pu\u00f2 annullare.')) return;
 var r = await apiSend('/api/admin/companies/'+c.id,'DELETE');
 if(r.ok){ await loadCompanies(); render(); }
 };
-[viewBtn,renameBtnEl,pwBtn,suspendBtn,planBtn,expiryBtn,emailBtn,phoneBtn,delBtn].forEach(function(b){ cell.appendChild(b); });
+[viewBtn,renameBtnEl,pwBtn,suspendBtn,planBtn,expiryBtn,emailBtn,phoneBtn,billingBtn,delBtn].forEach(function(b){ cell.appendChild(b); });
 });
 }
 frag.appendChild(listCard);
@@ -371,6 +380,7 @@ frag.appendChild(dataCard);
 return frag;
 }
 boot();
+
 
 
 
