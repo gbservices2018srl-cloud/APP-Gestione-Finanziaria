@@ -95,7 +95,10 @@ def init_db():
             phone TEXT,
             stripe_customer_id TEXT,
             stripe_subscription_id TEXT,
-            privacy_accepted_at TEXT
+            privacy_accepted_at TEXT,
+            billing_ragione_sociale TEXT,
+            billing_piva TEXT,
+            billing_address TEXT
         )"""
     )
     # migrazione sicura: se il database esisteva gia' (creato prima di questa
@@ -121,6 +124,12 @@ def init_db():
         db.execute("ALTER TABLE companies ADD COLUMN stripe_subscription_id TEXT")
     if "privacy_accepted_at" not in existing_cols:
         db.execute("ALTER TABLE companies ADD COLUMN privacy_accepted_at TEXT")
+    if "billing_ragione_sociale" not in existing_cols:
+        db.execute("ALTER TABLE companies ADD COLUMN billing_ragione_sociale TEXT")
+    if "billing_piva" not in existing_cols:
+        db.execute("ALTER TABLE companies ADD COLUMN billing_piva TEXT")
+    if "billing_address" not in existing_cols:
+        db.execute("ALTER TABLE companies ADD COLUMN billing_address TEXT")
     db.execute(
         """CREATE TABLE IF NOT EXISTS password_reset_requests (
             id TEXT PRIMARY KEY,
@@ -446,7 +455,8 @@ def admin_list_companies():
         return json_error("Non autorizzato.", 401)
     db = get_db()
     rows = db.execute(
-        "SELECT id, name, email, phone, created_at, suspended, expires_at, plan, approved FROM companies ORDER BY created_at DESC"
+        "SELECT id, name, email, phone, created_at, suspended, expires_at, plan, approved, "
+        "billing_ragione_sociale, billing_piva, billing_address FROM companies ORDER BY created_at DESC"
     ).fetchall()
     return jsonify({"companies": [dict(r) for r in rows]})
 
@@ -745,6 +755,14 @@ def create_checkout_session():
             client_reference_id=row["id"],
             subscription_data={"metadata": {"company_id": row["id"]}},
             metadata={"company_id": row["id"]},
+            billing_address_collection="required",
+            tax_id_collection={"enabled": True},
+            custom_fields=[{
+                "key": "ragione_sociale",
+                "label": {"type": "custom", "custom": "Ragione sociale (per la fattura)"},
+                "type": "text",
+                "optional": False
+            }],
             success_url=request.host_url.rstrip("/") + "/?checkout=success",
             cancel_url=request.host_url.rstrip("/") + "/?checkout=cancel",
         )
@@ -844,12 +862,24 @@ def stripe_webhook():
         company_id = obj.get("client_reference_id") or (obj.get("metadata") or {}).get("company_id")
         customer_id = obj.get("customer")
         subscription_id = obj.get("subscription")
+        customer_details = obj.get("customer_details") or {}
+        addr = customer_details.get("address") or {}
+        address_parts = [addr.get("line1"), addr.get("line2"), addr.get("postal_code"),
+                          addr.get("city"), addr.get("state"), addr.get("country")]
+        billing_address = ", ".join([p for p in address_parts if p]) or None
+        tax_ids = customer_details.get("tax_ids") or []
+        billing_piva = tax_ids[0].get("value") if tax_ids else None
+        ragione_sociale = None
+        for field in (obj.get("custom_fields") or []):
+            if field.get("key") == "ragione_sociale":
+                ragione_sociale = (field.get("text") or {}).get("value")
         if company_id:
             row = db.execute("SELECT name, email FROM companies WHERE id=?", (company_id,)).fetchone()
             db.execute(
                 "UPDATE companies SET plan='pro', approved=1, suspended=0, expires_at=NULL, "
-                "stripe_customer_id=?, stripe_subscription_id=? WHERE id=?",
-                (customer_id, subscription_id, company_id)
+                "stripe_customer_id=?, stripe_subscription_id=?, "
+                "billing_ragione_sociale=?, billing_piva=?, billing_address=? WHERE id=?",
+                (customer_id, subscription_id, ragione_sociale, billing_piva, billing_address, company_id)
             )
             db.commit()
             if row and row["email"]:
@@ -864,7 +894,11 @@ def stripe_webhook():
                 get_admin_notify_email(),
                 "Nuovo abbonamento pagante",
                 "L'azienda \"" + (row["name"] if row else company_id) + "\" ha completato il pagamento "
-                "ed e' stata attivata automaticamente sul piano Pro."
+                "ed e' stata attivata automaticamente sul piano Pro.\n\n"
+                "Dati di fatturazione forniti dal cliente:\n"
+                "Ragione sociale: " + (ragione_sociale or "non indicata") + "\n"
+                "Partita IVA: " + (billing_piva or "non indicata") + "\n"
+                "Indirizzo: " + (billing_address or "non indicato")
             )
 
     elif etype == "customer.subscription.deleted":
