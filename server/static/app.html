@@ -1212,7 +1212,8 @@ render();
 function creaBudgetAnnoSuccessivo(){
 if(STATE._editingNextYearBudget || STATE._editingArchivedYear!==null) return false;
 var now = new Date();
-var monthsElapsed = now.getMonth()+1;
+var realYear = now.getFullYear();
+var monthsElapsed = (STATE.currentYear === realYear) ? (now.getMonth()+1) : 12;
 var draft = {
 fixed: {}, varPct: {}, revenue: {},
 ammPct: JSON.parse(JSON.stringify(STATE.budget.ammPct||{})),
