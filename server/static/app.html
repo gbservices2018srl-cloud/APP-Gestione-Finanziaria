@@ -291,6 +291,7 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 
 
 
+
 var MONTHS = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 var MONTHS_SHORT = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 var FIXED_ITEMS_SEED = JSON.parse(document.getElementById('fixedItemsData').textContent);
@@ -331,7 +332,10 @@ companyLogo: null,
 ceColumns: [],
 yearArchives: [],
 _yearEditBackup: null,
-_editingArchivedYear: null
+_editingArchivedYear: null,
+nextYearBudget: null,
+_editingNextYearBudget: false,
+_budgetLiveBackup: null
 };
 var siteIds = [];
 SITES_SEED.forEach(function(name){
@@ -559,6 +563,9 @@ if(!Array.isArray(out.ceColumns)) out.ceColumns = [];
 if(!Array.isArray(out.yearArchives)) out.yearArchives = [];
 if(out._yearEditBackup===undefined) out._yearEditBackup = null;
 if(out._editingArchivedYear===undefined) out._editingArchivedYear = null;
+if(out.nextYearBudget===undefined) out.nextYearBudget = null;
+if(out._editingNextYearBudget===undefined) out._editingNextYearBudget = false;
+if(out._budgetLiveBackup===undefined) out._budgetLiveBackup = null;
 ['fixed','varPct','ammPct','revenue','guadagnoPct','oneTimeNewUL'].forEach(function(k){ if(!out.budget[k]) out.budget[k]={}; });
 ['revenue','produzione','fixed','varCat','mesiOverride'].forEach(function(k){ if(!out.consuntivo[k]) out.consuntivo[k]={}; });
 ['tmv','conv','splitPVest','splitPVint','splitOVint','splitNC'].forEach(function(f){ if(!out.incassi[f]) out.incassi[f]={}; });
@@ -1201,8 +1208,62 @@ currentPage = 'budget';
 currentBudgetSite = siteId;
 render();
 }
+function creaBudgetAnnoSuccessivo(){
+if(STATE._editingNextYearBudget || STATE._editingArchivedYear!==null) return false;
+var now = new Date();
+var monthsElapsed = now.getMonth()+1;
+var draft = {
+fixed: {}, varPct: {}, revenue: {},
+ammPct: JSON.parse(JSON.stringify(STATE.budget.ammPct||{})),
+guadagnoPct: JSON.parse(JSON.stringify(STATE.budget.guadagnoPct||{})),
+oneTimeNewUL: JSON.parse(JSON.stringify(STATE.budget.oneTimeNewUL||{})),
+createdAt: new Date().toISOString(),
+basedOnMonths: monthsElapsed
+};
+STATE.sites.forEach(function(site){
+var revSum = 0;
+for(var m=0;m<monthsElapsed;m++){ revSum += consRevenueMonthSite(site.id, m); }
+draft.revenue[site.id] = revSum / monthsElapsed;
+
+STATE.fixedItems.forEach(function(item){
+var costSum = 0;
+for(var m=0;m<monthsElapsed;m++){ costSum += consFixedMonth(item.id, site.id, m); }
+if(!draft.fixed[item.id]) draft.fixed[item.id] = {};
+draft.fixed[item.id][site.id] = costSum / monthsElapsed;
+});
+
+STATE.varCats.forEach(function(cat){
+var varSum = 0;
+for(var m=0;m<monthsElapsed;m++){ varSum += consVarCatMonth(cat.id, site.id, m); }
+if(!draft.varPct[cat.id]) draft.varPct[cat.id] = {};
+draft.varPct[cat.id][site.id] = revSum>0 ? (varSum/revSum) : 0;
+});
+});
+STATE.nextYearBudget = draft;
+saveState();
+return monthsElapsed;
+}
+function enterNextYearBudgetEdit(){
+if(!STATE.nextYearBudget) return false;
+if(STATE._editingArchivedYear!==null || STATE._editingNextYearBudget) return false;
+STATE._budgetLiveBackup = STATE.budget;
+STATE.budget = STATE.nextYearBudget;
+STATE._editingNextYearBudget = true;
+saveState();
+return true;
+}
+function exitNextYearBudgetEdit(){
+if(!STATE._editingNextYearBudget) return false;
+STATE.nextYearBudget = STATE.budget;
+STATE.budget = STATE._budgetLiveBackup;
+STATE._budgetLiveBackup = null;
+STATE._editingNextYearBudget = false;
+saveState();
+return true;
+}
 function archiveCurrentYear(year){
 if(STATE._editingArchivedYear!==null) return false;
+if(STATE._editingNextYearBudget) return false;
 var snapshot = {
 year: year,
 archivedAt: new Date().toISOString(),
@@ -1229,11 +1290,16 @@ STATE.varCats.forEach(function(c){
 STATE.consuntivo.varCat[c.id] = {};
 STATE.sites.forEach(function(site){ STATE.consuntivo.varCat[c.id][site.id] = newConsVarEntry(c.suppliers && c.suppliers.length>0); });
 });
+if(STATE.nextYearBudget){
+STATE.budget = STATE.nextYearBudget;
+STATE.nextYearBudget = null;
+}
 saveState();
 return true;
 }
 function enterArchivedYearEdit(year){
 if(STATE._editingArchivedYear!==null) return false;
+if(STATE._editingNextYearBudget) return false;
 var archive = STATE.yearArchives.find(function(a){ return a.year===year; });
 if(!archive) return false;
 STATE._yearEditBackup = {
@@ -1368,6 +1434,22 @@ render();
 };
 yearBanner.appendChild(exitYearBtn);
 main.appendChild(yearBanner);
+}
+if(STATE._editingNextYearBudget){
+var nybBanner = el('div',null,'');
+nybBanner.style.cssText = 'background:var(--teal);color:#fff;padding:12px 20px;border-radius:10px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;font-weight:700;';
+var nybText = el('span',null,'&#9998; Stai modificando la BOZZA di budget per l\u2019anno successivo &mdash; non tocca il budget di quest\u2019anno.');
+nybBanner.appendChild(nybText);
+var exitNybBtn = document.createElement('button');
+exitNybBtn.textContent = 'Salva e torna all\u2019anno corrente';
+exitNybBtn.style.cssText = 'background:#fff;color:var(--teal);border:none;padding:8px 16px;border-radius:7px;font-weight:700;cursor:pointer;';
+exitNybBtn.onclick = function(){
+exitNextYearBudgetEdit();
+flashStatus('Bozza salvata, tornato al budget dell\u2019anno corrente');
+render();
+};
+nybBanner.appendChild(exitNybBtn);
+main.appendChild(nybBanner);
 }
 if(isPageLocked(currentPage)){
 renderLockedPage(main);
@@ -2322,7 +2404,7 @@ document.getElementById('kpi-giorno').innerHTML = isFinite(c2.giornoBep)?fmtNum(
 document.getElementById('kpi-target').textContent = fmtEUR(c2.targetMese);
 }
 var card0 = el('div','card');
-card0.appendChild(el('h2','Parametri della sede: '+siteObj.name));
+card0.appendChild(el('h2',null,'Parametri della sede: '+siteObj.name));
 var row0 = el('div','input-row');
 row0.appendChild(el('label',null,'Fatturato stimato mensile (&euro;)'));
 row0.appendChild(bindMoneyNum({get:function(){return STATE.budget.revenue[si]||0;}, set:function(v){STATE.budget.revenue[si]=v;}},{rerender:true}));
@@ -2440,6 +2522,47 @@ main.appendChild(card3);
 }
 function renderBudgetTotale(main){
 main.appendChild(el('div','notebox','Vista di sola lettura: somma di tutte le sedi. Per modificare i valori, apri la scheda della singola sede.'));
+if(!STATE._editingNextYearBudget){
+var yearBtnCard = el('div','card');
+yearBtnCard.appendChild(el('h2',null,'Budget anno successivo'));
+if(!STATE.nextYearBudget){
+yearBtnCard.appendChild(el('div','help-tip','Crea una bozza di budget per l\u2019anno successivo, calcolata come media dei valori reali inseriti nel Consuntivo mensile da gennaio al mese corrente (anche se non hai ancora compilato tutti i mesi, la media si fa comunque su tutti i mesi trascorsi). La bozza resta separata dal budget di quest\u2019anno: puoi correggerla a mano quando vuoi. Diventa automaticamente il budget attivo solo quando chiudi l\u2019anno.'));
+var creaBudgetBtn = el('button','btn','Crea budget anno successivo');
+creaBudgetBtn.onclick = function(){
+var mesi = creaBudgetAnnoSuccessivo();
+flashStatus('Bozza creata sulla media di '+mesi+' mes'+(mesi===1?'e':'i'));
+render();
+};
+yearBtnCard.appendChild(creaBudgetBtn);
+} else {
+yearBtnCard.appendChild(el('div','notebox','Bozza gi\u00e0 creata il '+(STATE.nextYearBudget.createdAt||'').slice(0,10)+' (media su '+STATE.nextYearBudget.basedOnMonths+' mes'+(STATE.nextYearBudget.basedOnMonths===1?'e':'i')+'). Non tocca il budget di quest\u2019anno: diventer\u00e0 attiva da sola quando chiuderai l\u2019anno da Impostazioni e Backup.'));
+var editDraftBtn = el('button','btn','Modifica bozza');
+editDraftBtn.onclick = function(){ enterNextYearBudgetEdit(); flashStatus('Stai modificando la bozza dell\u2019anno successivo'); render(); };
+yearBtnCard.appendChild(editDraftBtn);
+var regenBtn = el('button','btn secondary','Rigenera dalla media attuale');
+regenBtn.style.marginLeft='10px';
+regenBtn.onclick = function(){
+showConfirmModal('Questo ricalcola la bozza da zero con la media aggiornata di oggi, sovrascrivendo eventuali modifiche manuali gi\u00e0 fatte alla bozza. Il budget di quest\u2019anno non viene toccato. Vuoi procedere?', function(){
+var mesi = creaBudgetAnnoSuccessivo();
+flashStatus('Bozza rigenerata sulla media di '+mesi+' mes'+(mesi===1?'e':'i'));
+render();
+});
+};
+yearBtnCard.appendChild(regenBtn);
+var delDraftBtn = el('button','btn danger','Elimina bozza');
+delDraftBtn.style.marginLeft='10px';
+delDraftBtn.onclick = function(){
+showConfirmModal('Eliminare la bozza di budget per l\u2019anno successivo? Non si pu\u00f2 annullare.', function(){
+STATE.nextYearBudget = null;
+saveState();
+flashStatus('Bozza eliminata');
+render();
+});
+};
+yearBtnCard.appendChild(delDraftBtn);
+}
+main.appendChild(yearBtnCard);
+}
 var all = calcBudgetAll();
 var kpis = el('div','kpi-grid');
 function kpi(label,value,cls){ var k=el('div','kpi'); k.appendChild(el('div','label',label)); k.appendChild(el('div','value '+(cls||''),value)); return k; }
@@ -2522,7 +2645,7 @@ function renderConsuntivoSite(main, siteId){
 var site = findSite(siteId);
 var mc = mesiCompilati(siteId);
 var card0 = el('div','card');
-card0.appendChild(el('h2','Fatturato incassato &mdash; '+site.name));
+card0.appendChild(el('h2',null,'Fatturato incassato &mdash; '+site.name));
 var wrap0 = el('div','table-scroll');
 var t0 = document.createElement('table'); t0.className='datatable';
 var h0 = '<tr><th>Voce</th>'+MONTHS_SHORT.map(function(m){return '<th>'+m+'</th>';}).join('')+'<th>Totale</th></tr>';
@@ -2542,7 +2665,7 @@ if(el2) el2.innerHTML = '<b>'+fmtEUR(sum(revArr))+'</b>';
 });
 main.appendChild(card0);
 var cardProd = el('div','card');
-cardProd.appendChild(el('h2','Valore produzione &mdash; '+site.name));
+cardProd.appendChild(el('h2',null,'Valore produzione &mdash; '+site.name));
 cardProd.appendChild(el('div','help-tip','Il valore della produzione (lavoro eseguito, anche se non ancora tutto incassato) viene usato nella pagina Statistiche storiche.'));
 var wrapP = el('div','table-scroll');
 var tP = document.createElement('table'); tP.className='datatable';
@@ -2571,7 +2694,7 @@ override.value = STATE.consuntivo.mesiOverride[siteId] || '';
 override.addEventListener('input', function(){ var v=parseInt(override.value,10); STATE.consuntivo.mesiOverride[siteId]=isNaN(v)?null:v; saveState(); });
 override.addEventListener('change', function(){ render(); });
 mesiRow.appendChild(override);
-card1.appendChild(el('h2','Periodo di riferimento &mdash; '+site.name));
+card1.appendChild(el('h2',null,'Periodo di riferimento &mdash; '+site.name));
 card1.appendChild(mesiRow);
 card1.appendChild(el('div','help-tip','Lascia vuoto per calcolare automaticamente quanti mesi hai gi\u00e0 compilato per questa sede.'));
 main.appendChild(card1);
@@ -2954,7 +3077,7 @@ if(Math.abs(r.splitTotal-1) > 0.001){
 main.appendChild(el('div','notebox','&#9888;&#65039; Le percentuali di ripartizione per questa sede sommano a '+fmtPct(r.splitTotal)+' invece che 100%. Correggi i valori qui sotto.'));
 }
 var card = el('div','card');
-card.appendChild(el('h2','Parametri &mdash; '+findSite(si).name));
+card.appendChild(el('h2',null,'Parametri &mdash; '+findSite(si).name));
 var row1 = el('div','input-row');
 row1.appendChild(el('label',null,'TMV (valore medio preventivo, &euro;)'));
 row1.appendChild(bindMoneyNum({get:function(){return STATE.incassi.tmv[si]||0;},set:function(v){STATE.incassi.tmv[si]=v;}},{rerender:true}));
@@ -3317,7 +3440,7 @@ main.appendChild(yearSel);
 var viewYear = statsSelectedYear;
 var isCurrentView = (viewYear === STATE.currentYear);
 var card1 = el('div','card');
-card1.appendChild(el('h2','Fatturato e produzione mensile per sede &mdash; '+viewYear));
+card1.appendChild(el('h2',null,'Fatturato e produzione mensile per sede &mdash; '+viewYear));
 if(isCurrentView){
 card1.appendChild(el('div','help-tip','Valori di sola lettura: per modificarli vai su <b>Consuntivo mensile</b>, scheda della sede interessata.'));
 } else {
@@ -3371,7 +3494,7 @@ if(pendEl){ pendEl.textContent = fmtEUR(pendingNow); pendEl.className = pendingN
 });
 }
 var card2 = el('div','card');
-card2.appendChild(el('h2','Conti correnti aziendali (liquidit\u00e0) &mdash; '+viewYear));
+card2.appendChild(el('h2',null,'Conti correnti aziendali (liquidit\u00e0) &mdash; '+viewYear));
 card2.appendChild(el('div','help-tip','I conti sono gli stessi in tutti gli anni: cambia solo il saldo mese per mese. Il totale si somma da solo.'));
 var accBtnRow = el('div','btn-row');
 var addAccBtn = el('button','btn','+ Nuovo conto corrente');
@@ -3426,7 +3549,7 @@ refreshBankTotals();
 });
 });
 var chartCard = el('div','card');
-chartCard.appendChild(el('h2','Andamento liquidit\u00e0 totale &mdash; '+viewYear));
+chartCard.appendChild(el('h2',null,'Andamento liquidit\u00e0 totale &mdash; '+viewYear));
 var chartWrap = el('div','chart-wrap');
 var cv = document.createElement('canvas'); chartWrap.appendChild(cv); chartCard.appendChild(chartWrap);
 main.appendChild(card2);
@@ -3540,18 +3663,24 @@ planCard.appendChild(el('div',null,'<div style="margin-top:12px;font-size:13px;o
 main.appendChild(planCard);
 var yearCard = el('div','card');
 yearCard.appendChild(el('h2',null,'Chiusura anno'));
-yearCard.appendChild(el('div','help-tip','Chiudere l\u2019anno archivia sedi, voci di costo, budget e Consuntivo mensile cos\u00ec come sono ora, poi azzera SOLO il Consuntivo per ripartire puliti col nuovo anno. La struttura di Budget resta com\u2019\u00e8, come punto di partenza. Puoi sempre riaprire un anno archiviato per correggerlo.'));
+yearCard.appendChild(el('div','help-tip','Chiudere l\u2019anno archivia sedi, voci di costo, budget e Consuntivo mensile cos\u00ec come sono ora, poi azzera SOLO il Consuntivo per ripartire puliti col nuovo anno. Se hai preparato una bozza di budget per l\u2019anno successivo (in Budget costi), diventa automaticamente quella il nuovo budget attivo; altrimenti la struttura di Budget resta com\u2019\u00e8. Puoi sempre riaprire un anno archiviato per correggerlo.'));
 if(STATE._editingArchivedYear!==null){
 yearCard.appendChild(el('div','notebox','Stai gi\u00e0 correggendo l\u2019anno '+STATE._editingArchivedYear+': torna all\u2019anno corrente (bottone in alto) prima di chiudere un nuovo anno.'));
+} else if(STATE._editingNextYearBudget){
+yearCard.appendChild(el('div','notebox','Stai modificando la bozza di budget dell\u2019anno successivo: salva e torna all\u2019anno corrente (bottone in alto) prima di chiudere l\u2019anno.'));
 } else {
 var closeYearBtn = el('button','btn danger','Chiudi anno '+STATE.currentYear+' e inizia il '+(STATE.currentYear+1));
 closeYearBtn.onclick = function(){
-showConfirmModal('Chiudere l\u2019anno '+STATE.currentYear+'? Il Consuntivo mensile verr\u00e0 archiviato e poi azzerato per il nuovo anno. La struttura di Budget (sedi, voci di costo) resta invariata. Potrai sempre riaprire '+STATE.currentYear+' in un secondo momento per correggerlo.', function(){
+var msg = 'Chiudere l\u2019anno '+STATE.currentYear+'? Il Consuntivo mensile verr\u00e0 archiviato e poi azzerato per il nuovo anno. '
++ (STATE.nextYearBudget ? 'La bozza di budget che hai preparato per l\u2019anno successivo diventer\u00e0 il nuovo budget attivo.' : 'La struttura di Budget (sedi, voci di costo) resta invariata.')
++ ' Potrai sempre riaprire '+STATE.currentYear+' in un secondo momento per correggerlo.';
+showConfirmModal(msg, function(){
 var year = STATE.currentYear;
+var hadDraft = !!STATE.nextYearBudget;
 archiveCurrentYear(year);
 STATE.currentYear = year+1;
 saveState();
-flashStatus('Anno '+year+' chiuso e archiviato');
+flashStatus('Anno '+year+' chiuso e archiviato'+(hadDraft ? ' \u2014 bozza budget applicata' : ''));
 render();
 });
 };
@@ -3706,6 +3835,7 @@ if(urlParams.get('checkout')) checkoutResult = urlParams.get('checkout');
 }catch(e){}
 startInactivityWatcher();
 bootApp();
+
 
 
 
