@@ -292,6 +292,7 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 
 
 
+
 var MONTHS = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 var MONTHS_SHORT = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 var FIXED_ITEMS_SEED = JSON.parse(document.getElementById('fixedItemsData').textContent);
@@ -2332,6 +2333,51 @@ return;
 main.appendChild(el('p','pagesub','Qui si costruisce la struttura dell\u2019azienda: sedi, macro-gruppi di costo e singole voci. Ogni modifica si riflette automaticamente in Scostamenti, Consuntivo e nelle altre pagine.'));
 main.appendChild(el('div','notebox','&#128197; <b>Inserire le voci di costo su base MENSILE.</b>'));
 main.appendChild(makeDownloadButton('budget_costi'));
+var yearTabs = el('div','site-selector');
+var curYearBtn = el('button','total-tab'+(!STATE._editingNextYearBudget?' active':''), 'Anno '+STATE.currentYear);
+curYearBtn.onclick = function(){
+if(STATE._editingNextYearBudget){ exitNextYearBudgetEdit(); }
+render();
+};
+yearTabs.appendChild(curYearBtn);
+var nextYearBtn = el('button','total-tab'+(STATE._editingNextYearBudget?' active':''), 'Anno '+(STATE.currentYear+1)+' (bozza)');
+nextYearBtn.onclick = function(){
+if(!STATE._editingNextYearBudget){
+if(!STATE.nextYearBudget){ creaBudgetAnnoSuccessivo(); }
+enterNextYearBudgetEdit();
+}
+render();
+};
+yearTabs.appendChild(nextYearBtn);
+main.appendChild(yearTabs);
+if(STATE._editingNextYearBudget){
+var draftInfoCard = el('div','card');
+draftInfoCard.appendChild(el('div','help-tip','Stai vedendo la bozza dell\u2019anno '+(STATE.currentYear+1)+', creata il '+(STATE.nextYearBudget?(STATE.nextYearBudget.createdAt||'').slice(0,10):'')+' come media dei dati reali del Consuntivo. Non tocca il budget di quest\u2019anno: diventa attiva automaticamente solo quando chiudi l\u2019anno.'));
+var regenBtn = el('button','btn secondary','Rigenera dalla media attuale');
+regenBtn.onclick = function(){
+showConfirmModal('Ricalcolare la bozza da zero con la media aggiornata di oggi? Le modifiche manuali gi\u00e0 fatte alla bozza andranno perse. Il budget di quest\u2019anno non viene toccato.', function(){
+exitNextYearBudgetEdit();
+var mesi = creaBudgetAnnoSuccessivo();
+enterNextYearBudgetEdit();
+flashStatus('Bozza rigenerata sulla media di '+mesi+' mes'+(mesi===1?'e':'i'));
+render();
+});
+};
+draftInfoCard.appendChild(regenBtn);
+var delDraftBtn = el('button','btn danger','Elimina bozza');
+delDraftBtn.style.marginLeft='10px';
+delDraftBtn.onclick = function(){
+showConfirmModal('Eliminare la bozza di budget per l\u2019anno successivo? Non si pu\u00f2 annullare.', function(){
+exitNextYearBudgetEdit();
+STATE.nextYearBudget = null;
+saveState();
+flashStatus('Bozza eliminata');
+render();
+});
+};
+draftInfoCard.appendChild(delDraftBtn);
+main.appendChild(draftInfoCard);
+}
 var siteCard = el('div','card');
 siteCard.appendChild(el('h2',null,'Sedi / centri'));
 siteCard.appendChild(el('div','help-tip','Un\u2019azienda mono-sede pu\u00f2 tenerne una sola. Aggiungine quante ne servono, rinominale o eliminale in qualsiasi momento.'));
@@ -2522,47 +2568,6 @@ main.appendChild(card3);
 }
 function renderBudgetTotale(main){
 main.appendChild(el('div','notebox','Vista di sola lettura: somma di tutte le sedi. Per modificare i valori, apri la scheda della singola sede.'));
-if(!STATE._editingNextYearBudget){
-var yearBtnCard = el('div','card');
-yearBtnCard.appendChild(el('h2',null,'Budget anno successivo'));
-if(!STATE.nextYearBudget){
-yearBtnCard.appendChild(el('div','help-tip','Crea una bozza di budget per l\u2019anno successivo, calcolata come media dei valori reali inseriti nel Consuntivo mensile da gennaio al mese corrente (anche se non hai ancora compilato tutti i mesi, la media si fa comunque su tutti i mesi trascorsi). La bozza resta separata dal budget di quest\u2019anno: puoi correggerla a mano quando vuoi. Diventa automaticamente il budget attivo solo quando chiudi l\u2019anno.'));
-var creaBudgetBtn = el('button','btn','Crea budget anno successivo');
-creaBudgetBtn.onclick = function(){
-var mesi = creaBudgetAnnoSuccessivo();
-flashStatus('Bozza creata sulla media di '+mesi+' mes'+(mesi===1?'e':'i'));
-render();
-};
-yearBtnCard.appendChild(creaBudgetBtn);
-} else {
-yearBtnCard.appendChild(el('div','notebox','Bozza gi\u00e0 creata il '+(STATE.nextYearBudget.createdAt||'').slice(0,10)+' (media su '+STATE.nextYearBudget.basedOnMonths+' mes'+(STATE.nextYearBudget.basedOnMonths===1?'e':'i')+'). Non tocca il budget di quest\u2019anno: diventer\u00e0 attiva da sola quando chiuderai l\u2019anno da Impostazioni e Backup.'));
-var editDraftBtn = el('button','btn','Modifica bozza');
-editDraftBtn.onclick = function(){ enterNextYearBudgetEdit(); flashStatus('Stai modificando la bozza dell\u2019anno successivo'); render(); };
-yearBtnCard.appendChild(editDraftBtn);
-var regenBtn = el('button','btn secondary','Rigenera dalla media attuale');
-regenBtn.style.marginLeft='10px';
-regenBtn.onclick = function(){
-showConfirmModal('Questo ricalcola la bozza da zero con la media aggiornata di oggi, sovrascrivendo eventuali modifiche manuali gi\u00e0 fatte alla bozza. Il budget di quest\u2019anno non viene toccato. Vuoi procedere?', function(){
-var mesi = creaBudgetAnnoSuccessivo();
-flashStatus('Bozza rigenerata sulla media di '+mesi+' mes'+(mesi===1?'e':'i'));
-render();
-});
-};
-yearBtnCard.appendChild(regenBtn);
-var delDraftBtn = el('button','btn danger','Elimina bozza');
-delDraftBtn.style.marginLeft='10px';
-delDraftBtn.onclick = function(){
-showConfirmModal('Eliminare la bozza di budget per l\u2019anno successivo? Non si pu\u00f2 annullare.', function(){
-STATE.nextYearBudget = null;
-saveState();
-flashStatus('Bozza eliminata');
-render();
-});
-};
-yearBtnCard.appendChild(delDraftBtn);
-}
-main.appendChild(yearBtnCard);
-}
 var all = calcBudgetAll();
 var kpis = el('div','kpi-grid');
 function kpi(label,value,cls){ var k=el('div','kpi'); k.appendChild(el('div','label',label)); k.appendChild(el('div','value '+(cls||''),value)); return k; }
@@ -3835,6 +3840,7 @@ if(urlParams.get('checkout')) checkoutResult = urlParams.get('checkout');
 }catch(e){}
 startInactivityWatcher();
 bootApp();
+
 
 
 
