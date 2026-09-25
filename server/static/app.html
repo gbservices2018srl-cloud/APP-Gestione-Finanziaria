@@ -293,6 +293,7 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 
 
 
+
 var MONTHS = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 var MONTHS_SHORT = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 var FIXED_ITEMS_SEED = JSON.parse(document.getElementById('fixedItemsData').textContent);
@@ -725,7 +726,7 @@ var name = await checkSession();
 if(name){ await bootAfterLogin(name); }
 else { isLoggedIn = false; render(); }
 }
-function fmtEUR(n){ if(n===null||n===undefined||isNaN(n)) n=0; return n.toLocaleString('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:0}); }
+function fmtEUR(n){ if(n===null||n===undefined||isNaN(n)) n=0; return n.toLocaleString('it-IT',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtEUR2(n){ if(n===null||n===undefined||isNaN(n)) n=0; return n.toLocaleString('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:2}); }
 function fmtPct(n,dec){ if(n===null||n===undefined||isNaN(n)||!isFinite(n)) n=0; return (n*100).toFixed(dec===undefined?1:dec)+'%'; }
 function fmtNum(n,dec){ if(n===null||n===undefined||isNaN(n)) n=0; return n.toLocaleString('it-IT',{maximumFractionDigits:dec===undefined?0:dec}); }
@@ -3071,33 +3072,57 @@ main.appendChild(el('div','help-tip','Somma dei valori di tutte le sedi. I param
 var si = currentIncassiSite;
 var r = calcIncassiSite(si);
 var kpis = el('div','kpi-grid');
-function kpi(label,value,cls){ var k=el('div','kpi'); k.appendChild(el('div','label',label)); k.appendChild(el('div','value '+(cls||''),value)); return k; }
-kpis.appendChild(kpi('Fatturato stimato mensile (da Budget Costi)', fmtEUR(r.target)));
-kpis.appendChild(kpi('OV necessarie / mese', fmtRound(r.ov)));
-kpis.appendChild(kpi('PV esterne', fmtRound(r.pvEst)));
-kpis.appendChild(kpi('PV interne', fmtRound(r.pvInt)));
-kpis.appendChild(kpi('OV interne', fmtRound(r.ovInt)));
-kpis.appendChild(kpi('Non controllabili', fmtRound(r.nc)));
+function kpi(label,value,cls,id){ var k=el('div','kpi'); k.appendChild(el('div','label',label)); var v=el('div','value '+(cls||''),value); if(id) v.id=id; k.appendChild(v); return k; }
+kpis.appendChild(kpi('Fatturato stimato mensile (da Budget Costi)', fmtEUR(r.target),'','incassi-target'));
+kpis.appendChild(kpi('OV necessarie / mese', fmtRound(r.ov),'','incassi-ov'));
+kpis.appendChild(kpi('PV esterne', fmtRound(r.pvEst),'','incassi-pvest'));
+kpis.appendChild(kpi('PV interne', fmtRound(r.pvInt),'','incassi-pvint'));
+kpis.appendChild(kpi('OV interne', fmtRound(r.ovInt),'','incassi-ovint'));
+kpis.appendChild(kpi('Non controllabili', fmtRound(r.nc),'','incassi-nc'));
 main.appendChild(kpis);
-if(Math.abs(r.splitTotal-1) > 0.001){
-main.appendChild(el('div','notebox','&#9888;&#65039; Le percentuali di ripartizione per questa sede sommano a '+fmtPct(r.splitTotal)+' invece che 100%. Correggi i valori qui sotto.'));
+var splitWarn = el('div','notebox','&#9888;&#65039; Le percentuali di ripartizione per questa sede sommano a '+fmtPct(r.splitTotal)+' invece che 100%. Correggi i valori qui sotto.');
+splitWarn.id = 'incassi-splitwarn';
+splitWarn.style.display = (Math.abs(r.splitTotal-1) > 0.001) ? '' : 'none';
+main.appendChild(splitWarn);
+function refreshIncassiLive(){
+var rr = calcIncassiSite(si);
+var map = {'incassi-target':fmtEUR(rr.target),'incassi-ov':fmtRound(rr.ov),'incassi-pvest':fmtRound(rr.pvEst),'incassi-pvint':fmtRound(rr.pvInt),'incassi-ovint':fmtRound(rr.ovInt),'incassi-nc':fmtRound(rr.nc)};
+Object.keys(map).forEach(function(id){ var elx=document.getElementById(id); if(elx) elx.textContent = map[id]; });
+var warnEl = document.getElementById('incassi-splitwarn');
+if(warnEl){
+if(Math.abs(rr.splitTotal-1) > 0.001){ warnEl.style.display=''; warnEl.innerHTML = '&#9888;&#65039; Le percentuali di ripartizione per questa sede sommano a '+fmtPct(rr.splitTotal)+' invece che 100%. Correggi i valori qui sotto.'; }
+else { warnEl.style.display='none'; }
+}
+}
+function liveNumInput(getVal,setVal,isPct,step){
+var inp = document.createElement('input');
+inp.type='number'; inp.step = step||'any';
+inp.value = isPct ? (getVal()*100).toFixed(1) : getVal();
+inp.addEventListener('input', function(){
+var v = parseFloat(inp.value); if(isNaN(v)) v=0;
+setVal(isPct ? v/100 : v);
+saveState();
+refreshIncassiLive();
+});
+var wrap = document.createElement('span'); wrap.className='money-cell'; wrap.appendChild(inp);
+return wrap;
 }
 var card = el('div','card');
 card.appendChild(el('h2',null,'Parametri &mdash; '+findSite(si).name));
 var row1 = el('div','input-row');
 row1.appendChild(el('label',null,'TMV (valore medio preventivo, &euro;)'));
-row1.appendChild(bindMoneyNum({get:function(){return STATE.incassi.tmv[si]||0;},set:function(v){STATE.incassi.tmv[si]=v;}},{rerender:true}));
+row1.appendChild(liveNumInput(function(){return STATE.incassi.tmv[si]||0;}, function(v){STATE.incassi.tmv[si]=v;}, false));
 card.appendChild(row1);
 var row2 = el('div','input-row');
 row2.appendChild(el('label',null,'% concretizzazione preventivo'));
-row2.appendChild(bindPctInput({get:function(){return STATE.incassi.conv[si]||0;},set:function(v){STATE.incassi.conv[si]=v;}},{rerender:true}));
+row2.appendChild(liveNumInput(function(){return STATE.incassi.conv[si]||0;}, function(v){STATE.incassi.conv[si]=v;}, true, '0.1'));
 card.appendChild(row2);
 card.appendChild(el('h3',null,'Ripartizione OV (deve sommare a 100%)'));
 var pairs = [['splitPVest','PV esterne (marketing esterno)'],['splitPVint','PV interne (1+1, golden ticket, raddoppi)'],['splitOVint','OV interne (ampliamenti, revisioni, old contact)'],['splitNC','Non controllabili (spontanee, referral...)']];
 pairs.forEach(function(p){
 var row = el('div','input-row');
 row.appendChild(el('label',null,p[1]));
-row.appendChild(bindPctInput({get:function(){return STATE.incassi[p[0]][si]||0;},set:function(v){STATE.incassi[p[0]][si]=v;}},{rerender:true}));
+row.appendChild(liveNumInput(function(){return STATE.incassi[p[0]][si]||0;}, function(v){STATE.incassi[p[0]][si]=v;}, true, '0.1'));
 card.appendChild(row);
 });
 main.appendChild(card);
@@ -3841,6 +3866,7 @@ if(urlParams.get('checkout')) checkoutResult = urlParams.get('checkout');
 }catch(e){}
 startInactivityWatcher();
 bootApp();
+
 
 
 
