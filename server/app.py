@@ -655,11 +655,24 @@ def company_login():
     name = (body.get("name") or "").strip()
     password = body.get("password") or ""
     db = get_db()
-    row = db.execute(
-        "SELECT id, password_hash, name, suspended, expires_at, approved FROM companies WHERE name=?",
-        (name,)
-    ).fetchone()
-    if row is None or not check_password_hash(row["password_hash"], password):
+    # Accesso tollerante: il campo puo' contenere il nome azienda (senza distinguere
+    # maiuscole/minuscole) oppure l'email dell'account; la password viene provata sia
+    # cosi' com'e' sia senza spazi ai bordi (registrazione e reset admin la salvano "strippata").
+    candidates = db.execute(
+        "SELECT id, password_hash, name, suspended, expires_at, approved FROM companies "
+        "WHERE name=? OR LOWER(TRIM(name))=LOWER(?) OR LOWER(TRIM(email))=LOWER(?) "
+        "ORDER BY (name=?) DESC",
+        (name, name, name, name)
+    ).fetchall() if name else []
+    pw_variants = [password]
+    if password.strip() != password:
+        pw_variants.append(password.strip())
+    row = None
+    for cand in candidates:
+        if any(check_password_hash(cand["password_hash"], pw) for pw in pw_variants):
+            row = cand
+            break
+    if row is None:
         return json_error("Nome azienda o password errati.", 401)
     if not row["approved"]:
         return json_error("Il tuo account e' in attesa di approvazione. Riceverai una email quando sara' attivo.", 403)
