@@ -360,9 +360,10 @@ s.consuntivo.mesiOverride[id] = null;
 });
 var catMap = {};
 FIXED_ITEMS_SEED.forEach(function(it){
-if(!catMap[it.cat]){ var cid = uid('fcat'); catMap[it.cat] = cid; s.fixedCats.push({id:cid, name:it.cat}); }
+if(!catMap[it.cat]){ var cid = uid('fcat'); catMap[it.cat] = cid; var fc={id:cid, name:it.cat}; if(/stipend/i.test(it.cat)) fc.perSite=true; s.fixedCats.push(fc); }
 });
 FIXED_ITEMS_SEED.forEach(function(it){
+if(/stipend/i.test(it.cat)) return;
 var iid = uid('fitem');
 s.fixedItems.push({id:iid, catId:catMap[it.cat], name:it.label});
 s.budget.fixed[iid] = {};
@@ -607,7 +608,7 @@ if(!out.bankBalances[a.id] || Array.isArray(out.bankBalances[a.id])) out.bankBal
 if(!out.bankBalances[a.id][out.currentYear]) out.bankBalances[a.id][out.currentYear] = MONTHS.map(function(){return 0;});
 out.statsYears.forEach(function(y){ if(!out.bankBalances[a.id][y.year]) out.bankBalances[a.id][y.year] = MONTHS.map(function(){return 0;}); });
 });
-return out;
+return migrateStaffPerSite(out);
 }
 function flashStatus(msg){
 var b = document.getElementById('statusBanner');
@@ -771,6 +772,7 @@ var newId = addSite(newName);
 STATE.budget[f][newId] = STATE.budget[f][sourceSiteId];
 });
 STATE.fixedItems.forEach(function(it){
+if(it.siteId) return; /* i collaboratori restano della sede originale */
 STATE.budget.fixed[it.id][newId] = STATE.budget.fixed[it.id][sourceSiteId];
 });
 STATE.varCats.forEach(function(c){
@@ -783,6 +785,7 @@ saveState();
 return newId;
 }
 function removeSite(id){
+STATE.fixedItems.filter(function(it){return it.siteId===id;}).forEach(function(it){ removeFixedItem(it.id, true); });
 STATE.sites = STATE.sites.filter(function(s){return s.id!==id;});
 ['ammPct','revenue','guadagnoPct','oneTimeNewUL'].forEach(function(f){ delete STATE.budget[f][id]; });
 Object.keys(STATE.budget.fixed).forEach(function(iid){ delete STATE.budget.fixed[iid][id]; });
@@ -848,9 +851,10 @@ items.forEach(function(it){ removeFixedItem(it.id, true); });
 STATE.fixedCats = STATE.fixedCats.filter(function(c){return c.id!==id;});
 saveState();
 }
-function addFixedItem(catId, name){
+function addFixedItem(catId, name, siteId){
 var id = uid('fitem');
-STATE.fixedItems.push({id:id, catId:catId, name:name||'Nuova voce'});
+var newIt = {id:id, catId:catId, name:name||'Nuova voce'}; if(siteId) newIt.siteId = siteId;
+STATE.fixedItems.push(newIt);
 STATE.budget.fixed[id] = {};
 STATE.consuntivo.fixed[id] = {};
 STATE.sites.forEach(function(s){ STATE.budget.fixed[id][s.id]=0; STATE.consuntivo.fixed[id][s.id]=newConsFixedEntry(); });
@@ -877,6 +881,68 @@ STATE.varCats = STATE.varCats.filter(function(c){return c.id!==id;});
 delete STATE.budget.varPct[id];
 delete STATE.consuntivo.varCat[id];
 saveState();
+}
+function itemVisibleForSite(it, siteId){ return !it.siteId || !siteId || it.siteId===siteId; }
+function itemLabel(it){ if(!it.siteId) return it.name; var s=findSite(it.siteId); return it.name+(s?' ('+s.name+')':''); }
+/* ---- stipendi per sede: ogni sede ha il suo elenco di collaboratori con nome ----
+   Una voce con "siteId" esiste solo per quella sede (come i fornitori nei costi variabili). */
+function staffTotals(st){
+var seen=[], b=0, c=0;
+[st.budget, st.nextYearBudget, st._budgetLiveBackup].forEach(function(bg){
+if(!bg || typeof bg!=='object' || seen.indexOf(bg)!==-1) return; seen.push(bg);
+Object.keys(bg.fixed||{}).forEach(function(iid){ Object.keys(bg.fixed[iid]||{}).forEach(function(sid){ b += Number(bg.fixed[iid][sid])||0; }); });
+});
+var cf=(st.consuntivo&&st.consuntivo.fixed)||{};
+Object.keys(cf).forEach(function(iid){ Object.keys(cf[iid]||{}).forEach(function(sid){ (cf[iid][sid]||[]).forEach(function(v){ c += Number(v)||0; }); }); });
+return {b:b, c:c};
+}
+function migrateStaffPerSite(out){
+try{
+if(!out || !Array.isArray(out.fixedCats) || !Array.isArray(out.fixedItems) || !Array.isArray(out.sites)) return out;
+if(out._editingArchivedYear!==null && out._editingArchivedYear!==undefined) return out;
+var targets = out.fixedCats.filter(function(c){ return c.perSite===undefined && /stipend/i.test(c.name||''); });
+if(!targets.length) return out;
+var before = staffTotals(out);
+var cl = JSON.parse(JSON.stringify(out));
+var budgets = [];
+[cl.budget, cl.nextYearBudget, cl._budgetLiveBackup].forEach(function(bg){ if(bg && typeof bg==='object' && budgets.indexOf(bg)===-1){ if(!bg.fixed) bg.fixed={}; budgets.push(bg); } });
+if(!cl.consuntivo.fixed) cl.consuntivo.fixed = {};
+if(!Array.isArray(cl.legacyStaffBackup)) cl.legacyStaffBackup = [];
+targets.forEach(function(tc){
+var cat = cl.fixedCats.find(function(c){ return c.id===tc.id; });
+var generic = cl.fixedItems.filter(function(it){ return it.catId===cat.id && !it.siteId; });
+var backup = { at:new Date().toISOString(), catId:cat.id, catName:cat.name, items:JSON.parse(JSON.stringify(generic)),
+budgets: budgets.map(function(bg){ var o={}; generic.forEach(function(g){ o[g.id]=JSON.parse(JSON.stringify(bg.fixed[g.id]||{})); }); return o; }),
+consuntivo:(function(){ var o={}; generic.forEach(function(g){ o[g.id]=JSON.parse(JSON.stringify(cl.consuntivo.fixed[g.id]||{})); }); return o; })() };
+cl.legacyStaffBackup.push(backup);
+var created = [];
+cl.sites.forEach(function(site){
+generic.forEach(function(g){
+var cons = (cl.consuntivo.fixed[g.id] && cl.consuntivo.fixed[g.id][site.id]) || [];
+var hasCons = cons.some(function(v){ return (Number(v)||0)!==0; });
+var hasBud = budgets.some(function(bg){ return (Number(bg.fixed[g.id] && bg.fixed[g.id][site.id])||0)!==0; });
+if(!hasCons && !hasBud) return;
+var nid = uid('fitem');
+created.push({id:nid, catId:cat.id, name:g.name, siteId:site.id});
+budgets.forEach(function(bg){
+bg.fixed[nid] = {};
+cl.sites.forEach(function(s2){ bg.fixed[nid][s2.id] = (s2.id===site.id) ? (Number(bg.fixed[g.id] && bg.fixed[g.id][site.id])||0) : 0; });
+});
+cl.consuntivo.fixed[nid] = {};
+cl.sites.forEach(function(s2){
+cl.consuntivo.fixed[nid][s2.id] = (s2.id===site.id) ? MONTHS.map(function(_,m){ return Number(cons[m])||0; }) : newConsFixedEntry();
+});
+});
+});
+var genericIds = generic.map(function(g){return g.id;});
+cl.fixedItems = cl.fixedItems.filter(function(it){ return genericIds.indexOf(it.id)===-1; }).concat(created);
+genericIds.forEach(function(gid){ budgets.forEach(function(bg){ delete bg.fixed[gid]; }); delete cl.consuntivo.fixed[gid]; });
+cat.perSite = true;
+});
+var after = staffTotals(cl);
+if(Math.abs(before.b-after.b)>0.005 || Math.abs(before.c-after.c)>0.005) return out; /* controllo di sicurezza: se i totali non coincidono non tocco nulla */
+return cl;
+}catch(e){ return out; }
 }
 function getBF(itemId, siteId){ return (STATE.budget.fixed[itemId] && Number(STATE.budget.fixed[itemId][siteId])) || 0; }
 function setBF(itemId, siteId, v){ if(!STATE.budget.fixed[itemId]) STATE.budget.fixed[itemId]={}; STATE.budget.fixed[itemId][siteId]=v; }
@@ -1009,7 +1075,7 @@ return {budgetAnno:budgetAnno,budgetMese:budgetMese,ytd:ytd,ancoraDisp:ancoraDis
 }
 function scostamentiSummarySite(siteId){
 var mc = mesiCompilati(siteId);
-var fixedRows = STATE.fixedItems.filter(function(it){return isFixedItemFilledSite(it.id, siteId);}).map(function(it){ return Object.assign({item:it}, scostamentoItem(it.id,siteId)); });
+var fixedRows = STATE.fixedItems.filter(function(it){return itemVisibleForSite(it,siteId) && isFixedItemFilledSite(it.id, siteId);}).map(function(it){ return Object.assign({item:it}, scostamentoItem(it.id,siteId)); });
 var varRows = STATE.varCats.filter(function(c){return isVarCatFilledSite(c.id, siteId);}).map(function(c){ return Object.assign({cat:c}, scostamentoVarCat(c.id,siteId)); });
 var totFixedBudgetAnno = sum(fixedRows.map(function(r){return r.budgetAnno;}));
 var totFixedProiezione = sum(fixedRows.map(function(r){return r.proiezione;}));
@@ -2503,7 +2569,7 @@ var card1 = el('div','card');
 card1.appendChild(el('h2',null,'Costi fissi mensili &mdash; struttura e importi'));
 card1.appendChild(el('div','help-tip','Apri un macro-gruppo per vedere le voci. Puoi rinominare o eliminare un macro-gruppo o una singola voce, oppure aggiungerne di nuove.'));
 STATE.fixedCats.forEach(function(cat){
-var items = STATE.fixedItems.filter(function(it){return it.catId===cat.id;});
+var items = STATE.fixedItems.filter(function(it){return it.catId===cat.id && itemVisibleForSite(it,si);});
 var catTotal = sum(items.map(function(it){return getBF(it.id,si);}));
 var det = document.createElement('details'); det.className='cat-collapse';
 var key = 'budget_cat_'+cat.id;
@@ -2522,6 +2588,7 @@ right.appendChild(renameBtn(function(){return cat.name;}, function(v){ cat.name=
 right.appendChild(deleteBtn('Eliminare il macro-gruppo "'+cat.name+'" e tutte le sue '+items.length+' voci? L\u2019operazione non si pu\u00f2 annullare.', function(){ removeFixedCat(cat.id); }));
 summary.appendChild(left); summary.appendChild(right);
 det.appendChild(summary);
+if(cat.perSite) det.appendChild(el('div','help-tip','Elenco indipendente per questa sede: i nomi dei collaboratori inseriti qui non compaiono nelle altre sedi.'));
 items.forEach(function(it){
 var r = el('div','input-row item-row');
 r.appendChild(bindEditableText({get:function(){return it.name;}, set:function(v){it.name=v;}}, {cls:'item-name-input'}));
@@ -2533,9 +2600,9 @@ refreshBudgetKPIs();
 r.appendChild(deleteBtn('Eliminare la voce "'+it.name+'"? Verranno persi anche i relativi dati di consuntivo.', function(){ removeFixedItem(it.id); }));
 det.appendChild(r);
 });
-var addItemBtn = el('button','small-btn','+ aggiungi voce');
+var addItemBtn = el('button','small-btn', cat.perSite ? '+ aggiungi collaboratore' : '+ aggiungi voce');
 addItemBtn.style.marginTop='6px';
-addItemBtn.onclick = function(){ addFixedItem(cat.id,'Nuova voce'); render(); };
+addItemBtn.onclick = function(){ if(cat.perSite) addFixedItem(cat.id,'Nuovo collaboratore',si); else addFixedItem(cat.id,'Nuova voce'); render(); };
 det.appendChild(addItemBtn);
 card1.appendChild(det);
 });
@@ -2624,7 +2691,7 @@ var body='';
 items.forEach(function(it){
 var rowTot=0; var cells='';
 STATE.sites.forEach(function(s){ var v=getBF(it.id,s.id); rowTot+=v; cells+='<td>'+fmtEUR(v)+'</td>'; });
-body += '<tr><td>'+it.name+'</td>'+cells+'<td>'+fmtEUR(rowTot)+'</td></tr>';
+body += '<tr><td>'+itemLabel(it)+'</td>'+cells+'<td>'+fmtEUR(rowTot)+'</td></tr>';
 });
 table.innerHTML = '<thead>'+head+'</thead><tbody>'+body+'</tbody>';
 wrap.appendChild(table); det.appendChild(wrap);
@@ -2739,8 +2806,8 @@ if(STATE.fixedCats.length===0){
 card2.appendChild(el('div','notebox','Nessuna voce di costo fisso definita. Vai su Budget costi per crearne.'));
 }
 STATE.fixedCats.forEach(function(cat){
-var items = STATE.fixedItems.filter(function(it){return it.catId===cat.id;}).filter(function(it){return isFixedItemFilledSite(it.id, siteId);});
-if(items.length===0) return;
+var items = STATE.fixedItems.filter(function(it){return it.catId===cat.id && itemVisibleForSite(it,siteId);}).filter(function(it){return isFixedItemFilledSite(it.id, siteId);});
+if(items.length===0 && !cat.perSite) return;
 var catTotal = sum(items.map(function(it){ return sum(consArrFixed(it.id,siteId)); }));
 var det = document.createElement('details'); det.className='cat-collapse';
 var detKey = 'cons_fixed_'+siteId+'_'+cat.id;
@@ -2754,21 +2821,27 @@ summary.appendChild(document.createTextNode(cat.name+' '));
 summary.appendChild(catTotalSpan);
 det.appendChild(summary);
 if(items.length===0){
-det.appendChild(el('div','help-tip','Nessuna voce in questo macro-gruppo.'));
+det.appendChild(el('div','help-tip', cat.perSite ? 'Nessun collaboratore in questa sede. Aggiungilo qui sotto: il nome resta solo in questa sede.' : 'Nessuna voce in questo macro-gruppo.'));
 } else {
 var wrap = el('div','table-scroll');
 var table = document.createElement('table'); table.className='datatable';
-var head = '<tr><th>Voce</th>'+MONTHS_SHORT.map(function(mm){return '<th>'+mm+'</th>';}).join('')+'<th>Tot.</th></tr>';
+var head = '<tr><th>Voce</th>'+MONTHS_SHORT.map(function(mm){return '<th>'+mm+'</th>';}).join('')+'<th>Tot.</th>'+(cat.perSite?'<th></th>':'')+'</tr>';
 var body='';
 items.forEach(function(it){
 var vals = consArrFixed(it.id,siteId);
-body += '<tr><td>'+it.name+'</td>';
+body += '<tr><td>'+(cat.perSite ? '<input type="text" data-role="name" data-i="'+it.id+'" value="'+String(it.name).replace(/"/g,'&quot;')+'" style="width:150px;text-align:left;"/>' : it.name)+'</td>';
 for(var mm2=0;mm2<12;mm2++){ body += '<td><span class="money-cell"><input type="number" data-i="'+it.id+'" data-m="'+mm2+'" value="'+(vals[mm2]||'')+'"/></span></td>'; }
-body += '<td id="rowtot_cf_'+siteId+'_'+it.id+'">'+fmtEUR(sum(vals))+'</td></tr>';
+body += '<td id="rowtot_cf_'+siteId+'_'+it.id+'">'+fmtEUR(sum(vals))+'</td>'+(cat.perSite ? '<td><button class="small-btn" data-role="del" data-i="'+it.id+'">rimuovi</button></td>' : '')+'</tr>';
 });
 table.innerHTML = '<thead>'+head+'</thead><tbody>'+body+'</tbody>';
 wrap.appendChild(table); det.appendChild(wrap);
-table.querySelectorAll('input').forEach(function(inp){
+table.querySelectorAll('input[data-role=name]').forEach(function(inp){
+inp.addEventListener('input', function(){ var fi=findFixedItem(inp.dataset.i); if(fi) fi.name=inp.value; saveState(); });
+});
+table.querySelectorAll('button[data-role=del]').forEach(function(btn){
+btn.addEventListener('click', function(){ var fi=findFixedItem(btn.dataset.i); if(!fi) return; showConfirmModal('Eliminare "'+fi.name+'" e i suoi importi? L\u2019operazione non si pu\u00f2 annullare.', function(){ removeFixedItem(fi.id); render(); }); });
+});
+table.querySelectorAll('input[data-m]').forEach(function(inp){
 inp.addEventListener('input', function(){
 var iid = inp.dataset.i, mIdx = parseInt(inp.dataset.m,10);
 var arr = consArrFixed(iid,siteId);
@@ -2780,6 +2853,12 @@ var newCatTotal = sum(items.map(function(i2){ return sum(consArrFixed(i2.id,site
 catTotalSpan.textContent = fmtEUR(newCatTotal);
 });
 });
+}
+if(cat.perSite){
+var addStaffBtn = el('button','small-btn','+ aggiungi collaboratore');
+addStaffBtn.style.marginTop='8px';
+addStaffBtn.onclick = function(){ addFixedItem(cat.id,'Nuovo collaboratore',siteId); openDetailsState[detKey]=true; render(); };
+det.appendChild(addStaffBtn);
 }
 card2.appendChild(det);
 });
@@ -2915,7 +2994,7 @@ for(var mm2=0;mm2<12;mm2++){
 var v=0; STATE.sites.forEach(function(s){ v+=consFixedMonth(it.id,s.id,mm2); });
 rowTot+=v; cells += '<td>'+fmtEUR(v)+'</td>';
 }
-body += '<tr><td>'+it.name+'</td>'+cells+'<td>'+fmtEUR(rowTot)+'</td></tr>';
+body += '<tr><td>'+itemLabel(it)+'</td>'+cells+'<td>'+fmtEUR(rowTot)+'</td></tr>';
 });
 table.innerHTML = '<thead>'+head+'</thead><tbody>'+body+'</tbody>';
 wrap.appendChild(table); det.appendChild(wrap);
@@ -3014,7 +3093,7 @@ s.fixedRows.forEach(function(r){
 var catObj = findFixedCat(r.item.catId);
 var catName = catObj ? catObj.name : '(senza categoria)';
 if(catName!==lastCat){ body+='<tr class="cat-row"><td colspan="6">'+catName+'</td></tr>'; lastCat=catName; }
-body += '<tr><td>'+r.item.name+'</td><td>'+fmtEUR(r.budgetMese)+'</td><td>'+fmtEUR(r.budgetAnno)+'</td><td>'+fmtEUR(r.ancoraDisp)+'</td><td>'+fmtEUR(r.proiezione)+'</td><td>'+scostBadge(r.scostamento)+'</td></tr>';
+body += '<tr><td>'+(currentScostSite==='TOTAL' ? itemLabel(r.item) : r.item.name)+'</td><td>'+fmtEUR(r.budgetMese)+'</td><td>'+fmtEUR(r.budgetAnno)+'</td><td>'+fmtEUR(r.ancoraDisp)+'</td><td>'+fmtEUR(r.proiezione)+'</td><td>'+scostBadge(r.scostamento)+'</td></tr>';
 });
 body += '<tr class="total-row"><td>TOTALE COSTI FISSI</td><td>'+fmtEUR(sum(s.fixedRows.map(function(r){return r.budgetMese;})))+'</td><td>'+fmtEUR(s.totFixedBudgetAnno)+'</td><td>'+fmtEUR(sum(s.fixedRows.map(function(r){return r.ancoraDisp;})))+'</td><td>'+fmtEUR(s.totFixedProiezione)+'</td><td>'+scostBadge(s.totFixedBudgetAnno-s.totFixedProiezione)+'</td></tr>';
 table.innerHTML = '<thead>'+head+'</thead><tbody>'+body+'</tbody>';
