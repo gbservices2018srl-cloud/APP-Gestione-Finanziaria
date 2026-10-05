@@ -98,7 +98,10 @@ table.datatable select{
   padding:4px 5px; border:1px solid var(--border); border-radius:5px; font-size:12px; max-width:170px;
 }
 table.datatable select:focus{outline:2px solid var(--teal); border-color:var(--teal);}
-.table-scroll{overflow-x:auto; max-width:100%;}
+.table-scroll{overflow:auto; max-width:100%; max-height:70vh; scroll-padding:44px 150px 0 150px;}
+table.datatable th{z-index:3;}
+table.datatable th:first-child{z-index:4;}
+@media print{.table-scroll{max-height:none !important; overflow:visible !important;}}
 .neg{color:var(--red);}
 .pos{color:var(--green);}
 
@@ -4104,22 +4107,84 @@ if(urlParams.get('checkout')) checkoutResult = urlParams.get('checkout');
 startInactivityWatcher();
 bootApp();
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/* ===== Navigazione con le frecce tra le caselle (come Excel) =====
+   Frecce su/giu e Invio: casella sopra/sotto (stessa colonna nelle tabelle).
+   Frecce sinistra/destra: casella accanto (nei campi di testo solo a fine/inizio testo). */
+(function(){
+if(typeof document==='undefined' || !document.addEventListener || window.__arrowNavBound) return;
+window.__arrowNavBound = true;
+function isNavInput(el){
+if(!el || el.tagName!=='INPUT') return false;
+var t=(el.getAttribute('type')||'text').toLowerCase();
+if(t!=='number' && t!=='text') return false;
+if(el.disabled || el.readOnly) return false;
+if(el.closest && el.closest('.modal-box, .modal-overlay')) return false;
+if(!(el.closest && el.closest('table.datatable, .card'))) return false;
+return true;
+}
+function isShown(el){
+for(var n=el; n && n.nodeType===1; n=n.parentNode){
+if(n.tagName==='DETAILS' && !n.open){ /* l'input e' visibile solo se sta dentro il summary */
+var inSummary=false; for(var m=el;m&&m!==n;m=m.parentNode){ if(m.tagName==='SUMMARY'){inSummary=true;break;} }
+if(!inSummary) return false;
+}
+if(n.style && n.style.display==='none') return false;
+}
+return true;
+}
+function allInputs(){
+var out=[]; var list=document.querySelectorAll('input');
+for(var i=0;i<list.length;i++){ if(isNavInput(list[i]) && isShown(list[i])) out.push(list[i]); }
+return out;
+}
+function findTarget(cur, key){
+var td = cur.closest ? cur.closest('td') : null;
+var tr = td ? td.parentNode : null;
+var table = tr && tr.closest ? tr.closest('table') : null;
+function rowInputs(row){ var r=[]; var q=row.querySelectorAll('input'); for(var i=0;i<q.length;i++){ if(isNavInput(q[i])&&isShown(q[i])) r.push(q[i]); } return r; }
+if(table){
+if(key==='ArrowLeft' || key==='ArrowRight'){
+var ri=rowInputs(tr); var p=ri.indexOf(cur); if(p<0) return null;
+return ri[p+(key==='ArrowLeft'?-1:1)]||null;
+}
+var rows=[].slice.call(table.rows); var idx=rows.indexOf(tr); var col=td.cellIndex;
+var step=(key==='ArrowUp')?-1:1;
+for(var k=idx+step;k>=0&&k<rows.length;k+=step){
+var c=rows[k].cells[col]; if(!c) continue;
+var q=c.querySelectorAll('input');
+for(var j=0;j<q.length;j++){ if(isNavInput(q[j])&&isShown(q[j])) return q[j]; }
+}
+return null;
+}
+if(key==='ArrowLeft' || key==='ArrowRight') return null;
+var scope = (cur.closest && (cur.closest('details') || cur.closest('.card'))) || document;
+var l=[].slice.call(scope.querySelectorAll('input')).filter(function(e){return isNavInput(e)&&isShown(e);});
+var pos=l.indexOf(cur); if(pos<0) return null;
+return l[pos+(key==='ArrowUp'?-1:1)]||null;
+}
+document.addEventListener('keydown', function(ev){
+try{
+var key=ev.key;
+if(key!=='ArrowUp'&&key!=='ArrowDown'&&key!=='ArrowLeft'&&key!=='ArrowRight'&&key!=='Enter') return;
+if(ev.altKey||ev.ctrlKey||ev.metaKey||ev.shiftKey||ev.isComposing) return;
+var cur=ev.target; if(!isNavInput(cur)) return;
+var isNum=(cur.getAttribute('type')||'text').toLowerCase()==='number';
+if(!isNum){
+var s=cur.selectionStart,e=cur.selectionEnd,len=(cur.value||'').length;
+if(key==='ArrowLeft' && !(s===0&&e===0)) return;
+if(key==='ArrowRight' && !(s===len&&e===len)) return;
+}
+var dir=(key==='Enter')?'ArrowDown':key;
+var tgt=findTarget(cur,dir);
+ev.preventDefault();
+if(!tgt) return;
+var before=allInputs(); var ord=before.indexOf(tgt);
+if(cur.blur) cur.blur(); /* conferma il valore: alcune caselle ridisegnano la pagina */
+if(!document.contains(tgt)){ var after=allInputs(); tgt = ord>=0 ? (after[ord]||null) : null; }
+if(tgt){ tgt.focus(); if(tgt.select) { try{ tgt.select(); }catch(e2){} } }
+}catch(err){}
+}, true);
+})();
 </script>
 </body>
 </html>
