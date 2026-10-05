@@ -608,7 +608,7 @@ if(!out.bankBalances[a.id] || Array.isArray(out.bankBalances[a.id])) out.bankBal
 if(!out.bankBalances[a.id][out.currentYear]) out.bankBalances[a.id][out.currentYear] = MONTHS.map(function(){return 0;});
 out.statsYears.forEach(function(y){ if(!out.bankBalances[a.id][y.year]) out.bankBalances[a.id][y.year] = MONTHS.map(function(){return 0;}); });
 });
-return migrateStaffPerSite(out);
+return migrateSuppliers(migrateStaffPerSite(out));
 }
 function flashStatus(msg){
 var b = document.getElementById('statusBanner');
@@ -880,6 +880,97 @@ function removeVarCat(id){
 STATE.varCats = STATE.varCats.filter(function(c){return c.id!==id;});
 delete STATE.budget.varPct[id];
 delete STATE.consuntivo.varCat[id];
+saveState();
+}
+
+/* ===== Fornitori / collaboratori / laboratori: elenco unico con spunte per sede =====
+   I dati restano dentro consuntivo.varCat[cat][sede].suppliers (tutti i calcoli esistenti invariati).
+   STATE.supplierMaster = [{id,catId,name,sites:{siteId:true},parked:{siteId:{values}}}]
+   L'id del fornitore e' lo stesso in tutte le sedi dove e' spuntato. */
+function normSupName(n){ return String(n==null?'':n).trim().toLowerCase(); }
+function findSupMaster(st,id){ return (st.supplierMaster||[]).find(function(m){return m.id===id;}); }
+function varSupTotals(st){ var t=0; try{ (st.varCats||[]).forEach(function(c){ var cv=(st.consuntivo&&st.consuntivo.varCat&&st.consuntivo.varCat[c.id])||{}; Object.keys(cv).forEach(function(sid){ var e=cv[sid]; if(!e) return; (e.total||[]).forEach(function(v){t+=Number(v)||0;}); (e.suppliers||[]).forEach(function(s){ (s.values||[]).forEach(function(v){t+=Number(v)||0;}); }); }); }); }catch(e){} return t; }
+function ensureSupEntryIn(st,m,sid){
+var cv=st.consuntivo.varCat[m.catId]; if(!cv) return;
+if(!cv[sid]) cv[sid]=newConsVarEntry(false);
+var e=cv[sid]; if(!Array.isArray(e.suppliers)) e.suppliers=[];
+if(!Array.isArray(e.total)) e.total=MONTHS.map(function(){return 0;});
+if(e.suppliers.some(function(s){return s.id===m.id;})) return;
+var vals=MONTHS.map(function(){return 0;});
+if(m.parked && m.parked[sid] && Array.isArray(m.parked[sid].values)){ vals=m.parked[sid].values.map(function(v){return Number(v)||0;}); delete m.parked[sid]; }
+else if(e.suppliers.length===0 && e.total.some(function(v){return (Number(v)||0)!==0;})){ vals=e.total.map(function(v){return Number(v)||0;}); e.total=MONTHS.map(function(){return 0;}); }
+e.suppliers.push({id:m.id,name:m.name,values:vals});
+}
+function syncSuppliers(st){
+try{
+if(!Array.isArray(st.supplierMaster)) st.supplierMaster=[];
+var M=st.supplierMaster; var siteIds=(st.sites||[]).map(function(s){return s.id;});
+M.forEach(function(m){ if(!m.sites||typeof m.sites!=='object') m.sites={}; if(!m.parked||typeof m.parked!=='object') m.parked={}; Object.keys(m.sites).forEach(function(k){ if(siteIds.indexOf(k)<0) delete m.sites[k]; }); });
+(st.varCats||[]).forEach(function(c){
+var cv=st.consuntivo.varCat[c.id]; if(!cv) return;
+siteIds.forEach(function(sid){
+var e=cv[sid]; if(!e||!Array.isArray(e.suppliers)) return;
+e.suppliers.forEach(function(sup){
+var m=M.find(function(x){return x.id===sup.id && x.catId===c.id;});
+if(m){ m.sites[sid]=true; sup.name=m.name; return; }
+var m2=M.find(function(x){return x.catId===c.id && !x.sites[sid] && normSupName(x.name)===normSupName(sup.name);});
+if(!m2){ m2={id:uid('msup'),catId:c.id,name:sup.name,sites:{},parked:{}}; M.push(m2); }
+sup.id=m2.id; sup.name=m2.name; m2.sites[sid]=true;
+});
+});
+});
+M.forEach(function(m){ siteIds.forEach(function(sid){ if(m.sites[sid]) ensureSupEntryIn(st,m,sid); }); });
+}catch(e){}
+return st;
+}
+function migrateSuppliers(out){
+try{
+if(!out || out._editingArchivedYear) return out;
+if(!out.consuntivo || !out.consuntivo.varCat || !Array.isArray(out.varCats) || !Array.isArray(out.sites)) return out;
+var cl=JSON.parse(JSON.stringify(out));
+var firstTime=!Array.isArray(cl.supplierMaster) || cl.supplierMaster.length===0;
+var before=varSupTotals(cl);
+var backup=firstTime?JSON.parse(JSON.stringify(cl.consuntivo.varCat)):null;
+syncSuppliers(cl);
+var after=varSupTotals(cl);
+if(Math.abs(before-after)>0.005) return out;
+if(firstTime && cl.supplierMaster.length>0 && !cl.legacySupplierBackup) cl.legacySupplierBackup={at:new Date().toISOString(),varCat:backup};
+return cl;
+}catch(e){ return out; }
+}
+function addSupplierMaster(catId,name,siteIds){
+if(!Array.isArray(STATE.supplierMaster)) STATE.supplierMaster=[];
+var m={id:uid('msup'),catId:catId,name:name||'Nuovo fornitore',sites:{},parked:{}};
+STATE.supplierMaster.push(m);
+(siteIds||[]).forEach(function(sid){ m.sites[sid]=true; ensureSupEntryIn(STATE,m,sid); });
+saveState(); return m;
+}
+function renameSupplierMaster(id,name){
+var m=findSupMaster(STATE,id); if(!m) return;
+m.name=name;
+STATE.sites.forEach(function(s){ var cv=STATE.consuntivo.varCat[m.catId]; var e=cv&&cv[s.id]; if(e&&e.suppliers) e.suppliers.forEach(function(sp){ if(sp.id===id) sp.name=name; }); });
+saveState();
+}
+function supplierSiteHasData(id,sid){
+var m=findSupMaster(STATE,id); if(!m) return false;
+var cv=STATE.consuntivo.varCat[m.catId]; var e=cv&&cv[sid]; if(!e||!e.suppliers) return false;
+var sp=e.suppliers.find(function(s){return s.id===id;});
+return !!sp && (sp.values||[]).some(function(v){return (Number(v)||0)!==0;});
+}
+function setSupplierSite(id,sid,on){
+var m=findSupMaster(STATE,id); if(!m) return;
+if(on){ m.sites[sid]=true; ensureSupEntryIn(STATE,m,sid); }
+else{
+var cv=STATE.consuntivo.varCat[m.catId]; var e=cv&&cv[sid];
+if(e&&e.suppliers){ var i=e.suppliers.findIndex(function(s){return s.id===id;}); if(i>=0){ var sp=e.suppliers[i]; if((sp.values||[]).some(function(v){return (Number(v)||0)!==0;})){ m.parked[sid]={values:sp.values.slice()}; } e.suppliers.splice(i,1); } }
+m.sites[sid]=false;
+}
+saveState();
+}
+function removeSupplierMaster(id){
+var m=findSupMaster(STATE,id); if(!m) return;
+STATE.sites.forEach(function(s){ var cv=STATE.consuntivo.varCat[m.catId]; var e=cv&&cv[s.id]; if(e&&e.suppliers) e.suppliers=e.suppliers.filter(function(sp){return sp.id!==id;}); });
+STATE.supplierMaster=STATE.supplierMaster.filter(function(x){return x.id!==id;});
 saveState();
 }
 function itemVisibleForSite(it, siteId){ return !it.siteId || !siteId || it.siteId===siteId; }
@@ -2158,8 +2249,8 @@ box.appendChild(btnRow);
 overlay.appendChild(box);
 document.body.appendChild(overlay);
 yesBtn.onclick = function(){ closeAppModal(); onYes(); };
-noBtn.onclick = closeAppModal;
-overlay.addEventListener('click', function(ev){ if(ev.target===overlay) closeAppModal(); });
+noBtn.onclick = function(){ closeAppModal(); if(opts.onNo) opts.onNo(); };
+overlay.addEventListener('click', function(ev){ if(ev.target===overlay){ closeAppModal(); if(opts.onNo) opts.onNo(); } });
 }
 function showConfirmCodeModal(message, code, onYes){
 closeAppModal();
@@ -2865,6 +2956,8 @@ card2.appendChild(det);
 main.appendChild(card2);
 var card3 = el('div','card');
 card3.appendChild(el('h2',null,'Costi variabili &mdash; importi reali per mese'));
+if(!STATE._editingArchivedYear) syncSuppliers(STATE);
+var isPrimarySite = (STATE.sites[0] && STATE.sites[0].id===siteId) && !STATE._editingArchivedYear;
 STATE.varCats.forEach(function(c){
 if(!isVarCatFilledSite(c.id, siteId)) return;
 var catObj = consEntryVar(c.id,siteId);
@@ -2904,28 +2997,22 @@ refreshCatTotal();
 });
 var switchBtn = el('button','small-btn','Suddividi per fornitore &raquo;');
 switchBtn.style.marginTop='6px';
-switchBtn.onclick = function(){ catObj.suppliers.push({id:uid('sup'), name:'Fornitore 1', values: MONTHS.map(function(){return 0;})}); saveState(); render(); };
+switchBtn.onclick = function(){ addSupplierMaster(c.id,'Fornitore 1',[siteId]); openDetailsState[detKey]=true; render(); };
 det.appendChild(switchBtn);
 } else {
-det.appendChild(el('div','help-tip','Suddiviso per fornitore/collaboratore. Il totale si somma automaticamente.'));
+det.appendChild(el('div','help-tip','Suddiviso per fornitore/collaboratore. Il totale si somma automaticamente.'+(isPrimarySite?'':' Elenco e sedi dei fornitori si gestiscono dalla scheda &laquo;'+(STATE.sites[0]?STATE.sites[0].name:'')+'&raquo;.')));
 var wrap2 = el('div','table-scroll');
 var table2 = document.createElement('table'); table2.className='datatable';
-var head2 = '<tr><th>Fornitore</th>'+MONTHS_SHORT.map(function(mm){return '<th>'+mm+'</th>';}).join('')+'<th>Tot.</th><th></th></tr>';
+var head2 = '<tr><th>Fornitore</th>'+MONTHS_SHORT.map(function(mm){return '<th>'+mm+'</th>';}).join('')+'<th>Tot.</th></tr>';
 var body2='';
 catObj.suppliers.forEach(function(sup){
-body2 += '<tr><td><input type="text" data-role="name" data-sid="'+sup.id+'" value="'+sup.name.replace(/"/g,'&quot;')+'" style="width:150px;text-align:left;"/></td>';
+body2 += '<tr><td style="text-align:left;white-space:nowrap;">'+String(sup.name).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</td>';
 for(var m5=0;m5<12;m5++){ body2 += '<td><span class="money-cell"><input type="number" data-role="val" data-sid="'+sup.id+'" data-m="'+m5+'" value="'+(sup.values[m5]||'')+'"/></span></td>'; }
-body2 += '<td id="rowtot_sup_'+sup.id+'">'+fmtEUR(sum(sup.values))+'</td><td><button class="small-btn" data-role="del" data-sid="'+sup.id+'">rimuovi</button></td></tr>';
+body2 += '<td id="rowtot_sup_'+sup.id+'">'+fmtEUR(sum(sup.values))+'</td></tr>';
 });
 table2.innerHTML = '<thead>'+head2+'</thead><tbody>'+body2+'</tbody>';
 wrap2.appendChild(table2); det.appendChild(wrap2);
-var addSupBtn = el('button','small-btn','+ aggiungi fornitore/voce');
-addSupBtn.style.marginTop='8px';
-addSupBtn.onclick = function(){ catObj.suppliers.push({id:uid('sup'),name:'Nuova voce', values:MONTHS.map(function(){return 0;})}); saveState(); render(); };
-det.appendChild(addSupBtn);
-table2.querySelectorAll('input[data-role=name]').forEach(function(inp){
-inp.addEventListener('input', function(){ var sup=catObj.suppliers.find(function(s){return s.id===inp.dataset.sid;}); if(sup) sup.name=inp.value; saveState(); });
-});
+wrap2.style.marginBottom='4px';
 table2.querySelectorAll('input[data-role=val]').forEach(function(inp){
 inp.addEventListener('input', function(){
 var sup=catObj.suppliers.find(function(s){return s.id===inp.dataset.sid;});
@@ -2938,9 +3025,49 @@ refreshCatTotal();
 }
 });
 });
-table2.querySelectorAll('button[data-role=del]').forEach(function(btn){
-btn.addEventListener('click', function(){ catObj.suppliers = catObj.suppliers.filter(function(s){return s.id!==btn.dataset.sid;}); saveState(); render(); });
+}
+if(isPrimarySite){
+var mgrKey='supmgr_'+c.id;
+var mg=document.createElement('details'); mg.className='supmgr'; mg.style.cssText='margin-top:8px;font-size:12.5px;';
+if(openDetailsState[mgrKey]) mg.open=true;
+mg.addEventListener('toggle',function(){ openDetailsState[mgrKey]=mg.open; });
+var cnt=(STATE.supplierMaster||[]).filter(function(x){return x.catId===c.id;}).length;
+var mgs=document.createElement('summary'); mgs.style.cssText='cursor:pointer;color:#2F8F9E;font-weight:600;'; mgs.textContent='Fornitori e sedi di visualizzazione ('+cnt+')';
+mg.appendChild(mgs);
+mg.appendChild(el('div','help-tip','Qui crei e rinomini i fornitori/collaboratori una volta sola e spunti in quali sedi devono comparire. Togliere la spunta non cancella i dati inseriti: se la rimetti, tornano.'));
+var mw=el('div','table-scroll'); var mt=document.createElement('table'); mt.className='datatable';
+var mh='<tr><th style="text-align:left;">Fornitore</th>'+STATE.sites.map(function(s){return '<th title="'+String(s.name).replace(/"/g,'&quot;')+'" style="font-size:11px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+String(s.name).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</th>';}).join('')+'<th></th></tr>';
+var mb='';
+(STATE.supplierMaster||[]).filter(function(x){return x.catId===c.id;}).forEach(function(m){
+mb+='<tr><td><input type="text" data-role="mname" data-mid="'+m.id+'" value="'+String(m.name).replace(/"/g,'&quot;')+'" style="width:160px;text-align:left;"/></td>';
+STATE.sites.forEach(function(s){ mb+='<td style="text-align:center;"><input type="checkbox" data-role="msite" data-mid="'+m.id+'" data-sid="'+s.id+'"'+(m.sites[s.id]?' checked':'')+' style="width:auto;"/></td>'; });
+mb+='<td><button class="small-btn" data-role="mdel" data-mid="'+m.id+'">elimina</button></td></tr>';
 });
+mt.innerHTML='<thead>'+mh+'</thead><tbody>'+mb+'</tbody>';
+mw.appendChild(mt); mg.appendChild(mw);
+var addM=el('button','small-btn','+ aggiungi fornitore'); addM.style.marginTop='6px';
+addM.onclick=function(){ addSupplierMaster(c.id,'Nuovo fornitore',[siteId]); openDetailsState[detKey]=true; openDetailsState[mgrKey]=true; render(); };
+mg.appendChild(addM);
+mt.querySelectorAll('input[data-role=mname]').forEach(function(inp){
+inp.addEventListener('input',function(){ renameSupplierMaster(inp.dataset.mid,inp.value); });
+inp.addEventListener('change',function(){ openDetailsState[detKey]=true; openDetailsState[mgrKey]=true; render(); });
+});
+mt.querySelectorAll('input[data-role=msite]').forEach(function(cb){
+cb.addEventListener('change',function(){
+var mid=cb.dataset.mid, sid=cb.dataset.sid, on=cb.checked;
+var done=function(){ setSupplierSite(mid,sid,on); openDetailsState[detKey]=true; openDetailsState[mgrKey]=true; render(); };
+if(!on && supplierSiteHasData(mid,sid)){
+showConfirmModal('Questo fornitore ha importi inseriti in questa sede. Togliendo la spunta sparisce dalla sede e dai suoi totali; i dati restano salvati e tornano se rimetti la spunta. Procedere?', done, {onNo:function(){ cb.checked=true; }});
+} else done();
+});
+});
+mt.querySelectorAll('button[data-role=mdel]').forEach(function(btn){
+btn.addEventListener('click',function(){
+var mid=btn.dataset.mid;
+showConfirmModal('Eliminare definitivamente questo fornitore da tutte le sedi, compresi gli importi inseriti?', function(){ removeSupplierMaster(mid); openDetailsState[detKey]=true; openDetailsState[mgrKey]=true; render(); });
+});
+});
+det.appendChild(mg);
 }
 card3.appendChild(det);
 });
