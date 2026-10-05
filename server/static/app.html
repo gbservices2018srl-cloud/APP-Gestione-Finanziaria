@@ -882,10 +882,13 @@ function getBF(itemId, siteId){ return (STATE.budget.fixed[itemId] && Number(STA
 function setBF(itemId, siteId, v){ if(!STATE.budget.fixed[itemId]) STATE.budget.fixed[itemId]={}; STATE.budget.fixed[itemId][siteId]=v; }
 function getBV(catId, siteId){ return (STATE.budget.varPct[catId] && Number(STATE.budget.varPct[catId][siteId])) || 0; }
 function setBV(catId, siteId, v){ if(!STATE.budget.varPct[catId]) STATE.budget.varPct[catId]={}; STATE.budget.varPct[catId][siteId]=v; }
-function isFixedItemFilledSite(itemId, siteId){ return getBF(itemId, siteId) !== 0; }
-function isVarCatFilledSite(catId, siteId){ return getBV(catId, siteId) !== 0; }
-function isFixedItemFilledAny(itemId){ return STATE.sites.some(function(s){ return isFixedItemFilledSite(itemId, s.id); }); }
-function isVarCatFilledAny(catId){ return STATE.sites.some(function(s){ return isVarCatFilledSite(catId, s.id); }); }
+/* Funzione "nascondi voci non compilate nel budget della sede": DISATTIVATA.
+   Per riattivarla basta mettere HIDE_UNFILLED_ITEMS = true. */
+var HIDE_UNFILLED_ITEMS = false;
+function isFixedItemFilledSite(itemId, siteId){ return !HIDE_UNFILLED_ITEMS || getBF(itemId, siteId) !== 0; }
+function isVarCatFilledSite(catId, siteId){ return !HIDE_UNFILLED_ITEMS || getBV(catId, siteId) !== 0; }
+function isFixedItemFilledAny(itemId){ return !HIDE_UNFILLED_ITEMS || STATE.sites.some(function(s){ return getBF(itemId, s.id) !== 0; }); }
+function isVarCatFilledAny(catId){ return !HIDE_UNFILLED_ITEMS || STATE.sites.some(function(s){ return getBV(catId, s.id) !== 0; }); }
 function calcBudgetSite(siteId){
 var fixedSum = 0;
 STATE.fixedItems.forEach(function(it){ fixedSum += getBF(it.id, siteId); });
