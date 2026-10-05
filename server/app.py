@@ -1122,6 +1122,69 @@ def serve_admin():
     return send_from_directory(STATIC_DIR, "admin.html")
 
 
+# ---------------------------------------------------------------- altre app sullo stesso dominio
+# /ticketassistenza -> app "Assistenza Studi" (servizio Render separato).
+# Qui si fa solo da ponte: la richiesta viene girata all'altra app e la risposta
+# restituita cosi' com'e'. Cookie e sessione di questa app NON vengono inoltrati.
+import urllib.request
+import urllib.error
+import urllib.parse
+from flask import Response
+
+TICKET_UPSTREAM = os.environ.get("TICKET_UPSTREAM", "https://app-ticket-assistenza.onrender.com").rstrip("/")
+_PROXY_TIMEOUT = 25
+_PROXY_REQ_HEADERS = ("Accept", "Accept-Encoding", "Accept-Language", "Content-Type",
+                      "User-Agent", "Cache-Control", "If-None-Match", "If-Modified-Since", "Range")
+_PROXY_SKIP_RESP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
+                    "te", "trailers", "transfer-encoding", "upgrade", "content-length", "set-cookie"}
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None  # i redirect vanno restituiti al browser, non seguiti qui
+
+
+_proxy_opener = urllib.request.build_opener(_NoRedirect)
+
+
+@app.route("/ticketassistenza", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
+@app.route("/ticketassistenza/", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
+@app.route("/ticketassistenza/<path:sub>", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"])
+def proxy_ticketassistenza(sub=""):
+    path = urllib.parse.quote(request.path, safe="/:@!$&'()*+,;=-._~%")
+    url = TICKET_UPSTREAM + path
+    if request.query_string:
+        url += "?" + request.query_string.decode("utf-8", "ignore")
+
+    headers = {h: request.headers[h] for h in _PROXY_REQ_HEADERS if h in request.headers}
+    headers["X-Forwarded-Host"] = request.host
+    headers["X-Forwarded-Proto"] = "https"
+    body = request.get_data() if request.method not in ("GET", "HEAD") else None
+
+    req = urllib.request.Request(url, data=body, headers=headers, method=request.method)
+    try:
+        resp = _proxy_opener.open(req, timeout=_PROXY_TIMEOUT)
+    except urllib.error.HTTPError as e:  # 3xx/4xx/5xx dell'app ticket: passano uguali
+        resp = e
+    except Exception:
+        # tipico: l'app ticket e' in "sospensione" e impiega qualche secondo a svegliarsi
+        page = ("<!doctype html><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+                "<meta http-equiv='refresh' content='6'><title>TO Smile</title>"
+                "<body style='font-family:sans-serif;text-align:center;padding:60px 20px;color:#33333D'>"
+                "<h2>Sto avviando l'app...</h2><p>La pagina si ricarica da sola tra pochi secondi.</p></body>")
+        return Response(page, status=503, mimetype="text/html", headers={"Retry-After": "6"})
+
+    data = resp.read()
+    out = Response(data, status=resp.status if hasattr(resp, "status") else resp.code)
+    for k, v in resp.headers.items():
+        if k.lower() in _PROXY_SKIP_RESP:
+            continue
+        if k.lower() == "location":
+            v = v.replace(TICKET_UPSTREAM, request.host_url.rstrip("/"))
+        out.headers[k] = v
+    return out
+
+
 init_db()
 
 if __name__ == "__main__":
