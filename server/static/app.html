@@ -611,7 +611,7 @@ if(!out.bankBalances[a.id] || Array.isArray(out.bankBalances[a.id])) out.bankBal
 if(!out.bankBalances[a.id][out.currentYear]) out.bankBalances[a.id][out.currentYear] = MONTHS.map(function(){return 0;});
 out.statsYears.forEach(function(y){ if(!out.bankBalances[a.id][y.year]) out.bankBalances[a.id][y.year] = MONTHS.map(function(){return 0;}); });
 });
-return migrateSuppliers(migrateStaffPerSite(out));
+return migrateSiteChoice(migrateSuppliers(migrateStaffPerSite(out)));
 }
 function flashStatus(msg){
 var b = document.getElementById('statusBanner');
@@ -976,7 +976,111 @@ STATE.sites.forEach(function(s){ var cv=STATE.consuntivo.varCat[m.catId]; var e=
 STATE.supplierMaster=STATE.supplierMaster.filter(function(x){return x.id!==id;});
 saveState();
 }
-function itemVisibleForSite(it, siteId){ return !it.siteId || !siteId || it.siteId===siteId; }
+function itemVisibleForSite(it, siteId){ if(it.sites && siteId && !it.sites[siteId]) return false; return !it.siteId || !siteId || it.siteId===siteId; }
+/* ===== Finanziamenti e leasing: elenco unico gestito dalla prima sede con spunte per sede =====
+   Come i fornitori/dottori nei costi variabili. La categoria ha siteChoice=true; ogni voce ha
+   sites:{siteId:true}. Togliendo la spunta gli importi della sede vengono messi da parte (parked)
+   e azzerati, cosi' tutti i totali restano corretti; rimettendo la spunta tornano. */
+function siteChoiceBudgets(st){ var out=[]; [st.budget, st.nextYearBudget, st._budgetLiveBackup].forEach(function(bg){ if(bg && typeof bg==='object' && out.indexOf(bg)===-1){ if(!bg.fixed) bg.fixed={}; out.push(bg); } }); return out; }
+function migrateSiteChoice(out){
+try{
+if(!out || !Array.isArray(out.fixedCats) || !Array.isArray(out.fixedItems) || !Array.isArray(out.sites)) return out;
+if(out._editingArchivedYear!==null && out._editingArchivedYear!==undefined) return out;
+out.fixedCats.forEach(function(c){
+if(c.siteChoice===undefined && !c.perSite && /finanzi|leasing/i.test(c.name||'')) c.siteChoice=true;
+if(!c.siteChoice) return;
+out.fixedItems.forEach(function(it){
+if(it.catId!==c.id || it.siteId) return;
+if(!it.sites || typeof it.sites!=='object'){ it.sites={}; out.sites.forEach(function(s){ it.sites[s.id]=true; }); }
+if(!it.parked || typeof it.parked!=='object') it.parked={};
+});
+});
+}catch(e){}
+return out;
+}
+function isSiteChoiceCat(cat){ return !!(cat && cat.siteChoice && !cat.perSite); }
+function fixedItemSiteHasData(id,sid){
+var b=siteChoiceBudgets(STATE).some(function(bg){ return (Number(bg.fixed[id] && bg.fixed[id][sid])||0)!==0; });
+var c=((STATE.consuntivo.fixed[id]||{})[sid]||[]).some(function(v){ return (Number(v)||0)!==0; });
+return b||c;
+}
+function setFixedItemSite(id,sid,on){
+var it=findFixedItem(id); if(!it) return;
+if(!it.sites) it.sites={}; if(!it.parked) it.parked={};
+var budgets=siteChoiceBudgets(STATE);
+if(!STATE.consuntivo.fixed[id]) STATE.consuntivo.fixed[id]={};
+if(on){
+it.sites[sid]=true;
+var pk=it.parked[sid];
+if(pk){
+budgets.forEach(function(bg,i){ if(!bg.fixed[id]) bg.fixed[id]={}; if(pk.budgets && pk.budgets[i]!==undefined) bg.fixed[id][sid]=pk.budgets[i]; });
+if(Array.isArray(pk.cons)) STATE.consuntivo.fixed[id][sid]=pk.cons.slice();
+delete it.parked[sid];
+}
+if(!STATE.consuntivo.fixed[id][sid]) STATE.consuntivo.fixed[id][sid]=newConsFixedEntry();
+budgets.forEach(function(bg){ if(!bg.fixed[id]) bg.fixed[id]={}; if(bg.fixed[id][sid]===undefined) bg.fixed[id][sid]=0; });
+} else {
+if(fixedItemSiteHasData(id,sid)){
+it.parked[sid]={budgets:budgets.map(function(bg){ return Number(bg.fixed[id] && bg.fixed[id][sid])||0; }), cons:(STATE.consuntivo.fixed[id][sid]||newConsFixedEntry()).slice()};
+}
+budgets.forEach(function(bg){ if(bg.fixed[id]) bg.fixed[id][sid]=0; });
+STATE.consuntivo.fixed[id][sid]=newConsFixedEntry();
+it.sites[sid]=false;
+}
+saveState();
+}
+function addSiteChoiceItem(catId,name,siteIds){
+var id=addFixedItem(catId,name);
+var it=findFixedItem(id); it.sites={}; it.parked={};
+(siteIds||[]).forEach(function(sid){ it.sites[sid]=true; });
+saveState(); return id;
+}
+/* Pannello della prima sede: voci della categoria e spunte delle sedi in cui compaiono */
+function buildSiteChoiceManager(cat, keepOpen){
+var mgrKey='scmgr_'+cat.id;
+var mg=document.createElement('details'); mg.className='supmgr'; mg.style.cssText='margin-top:8px;font-size:12.5px;';
+if(openDetailsState[mgrKey]) mg.open=true;
+mg.addEventListener('toggle',function(){ openDetailsState[mgrKey]=mg.open; });
+var list=STATE.fixedItems.filter(function(x){return x.catId===cat.id && !x.siteId;});
+var mgs=document.createElement('summary'); mgs.style.cssText='cursor:pointer;color:#2F8F9E;font-weight:600;'; mgs.textContent='Voci e sedi di visualizzazione ('+list.length+')';
+mg.appendChild(mgs);
+mg.appendChild(el('div','help-tip','Qui crei e rinomini le voci una volta sola e spunti in quali sedi devono comparire. Togliere la spunta non cancella i dati inseriti: se la rimetti, tornano.'));
+var mw=el('div','table-scroll'); var mt=document.createElement('table'); mt.className='datatable';
+var esc=function(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); };
+var mh='<tr><th style="text-align:left;">Voce</th>'+STATE.sites.map(function(s){return '<th title="'+esc(s.name)+'" style="font-size:11px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(s.name)+'</th>';}).join('')+'<th></th></tr>';
+var mb='';
+list.forEach(function(m){
+mb+='<tr><td><input type="text" data-role="scname" data-mid="'+m.id+'" value="'+esc(m.name)+'" style="width:160px;text-align:left;"/></td>';
+STATE.sites.forEach(function(s){ mb+='<td style="text-align:center;"><input type="checkbox" data-role="scsite" data-mid="'+m.id+'" data-sid="'+s.id+'"'+((!m.sites||m.sites[s.id])?' checked':'')+' style="width:auto;"/></td>'; });
+mb+='<td><button class="small-btn" data-role="scdel" data-mid="'+m.id+'">elimina</button></td></tr>';
+});
+mt.innerHTML='<thead>'+mh+'</thead><tbody>'+mb+'</tbody>';
+mw.appendChild(mt); mg.appendChild(mw);
+var reopen=function(){ (keepOpen||[]).forEach(function(k){ openDetailsState[k]=true; }); openDetailsState[mgrKey]=true; render(); };
+var addM=el('button','small-btn','+ aggiungi voce'); addM.style.marginTop='6px';
+addM.onclick=function(){ addSiteChoiceItem(cat.id,'Nuova voce',[STATE.sites[0].id]); reopen(); };
+mg.appendChild(addM);
+mt.querySelectorAll('input[data-role=scname]').forEach(function(inp){
+inp.addEventListener('input',function(){ var it=findFixedItem(inp.dataset.mid); if(it){ it.name=inp.value; saveState(); } });
+inp.addEventListener('change',reopen);
+});
+mt.querySelectorAll('input[data-role=scsite]').forEach(function(cb){
+cb.addEventListener('change',function(){
+var mid=cb.dataset.mid, sid=cb.dataset.sid, on=cb.checked;
+var done=function(){ setFixedItemSite(mid,sid,on); reopen(); };
+if(!on && fixedItemSiteHasData(mid,sid)){
+showConfirmModal('Questa voce ha importi inseriti in questa sede. Togliendo la spunta sparisce dalla sede e dai suoi totali; i dati restano salvati e tornano se rimetti la spunta. Procedere?', done, {onNo:function(){ cb.checked=true; }});
+} else done();
+});
+});
+mt.querySelectorAll('button[data-role=scdel]').forEach(function(btn){
+btn.addEventListener('click',function(){
+var mid=btn.dataset.mid;
+showConfirmModal('Eliminare definitivamente questa voce da tutte le sedi, compresi gli importi inseriti?', function(){ removeFixedItem(mid); reopen(); });
+});
+});
+return mg;
+}
 function itemLabel(it){ if(!it.siteId) return it.name; var s=findSite(it.siteId); return it.name+(s?' ('+s.name+')':''); }
 /* ---- stipendi per sede: ogni sede ha il suo elenco di collaboratori con nome ----
    Una voce con "siteId" esiste solo per quella sede (come i fornitori nei costi variabili). */
@@ -2683,21 +2787,28 @@ right.appendChild(deleteBtn('Eliminare il macro-gruppo "'+cat.name+'" e tutte le
 summary.appendChild(left); summary.appendChild(right);
 det.appendChild(summary);
 if(cat.perSite) det.appendChild(el('div','help-tip','Elenco indipendente per questa sede: i nomi dei collaboratori inseriti qui non compaiono nelle altre sedi.'));
+var scCat = isSiteChoiceCat(cat) && !STATE._editingArchivedYear;
+var scPrimary = scCat && STATE.sites[0] && STATE.sites[0].id===si;
+if(scCat && !scPrimary) det.appendChild(el('div','help-tip','Le voci e le sedi in cui compaiono si gestiscono dalla scheda &laquo;'+(STATE.sites[0]?STATE.sites[0].name:'')+'&raquo;. Qui inserisci solo gli importi di questa sede.'));
 items.forEach(function(it){
 var r = el('div','input-row item-row');
-r.appendChild(bindEditableText({get:function(){return it.name;}, set:function(v){it.name=v;}}, {cls:'item-name-input'}));
+if(scCat){ var nm=el('span','item-name-input'); nm.textContent=it.name; nm.style.cssText='display:inline-block;padding:6px 0;'; r.appendChild(nm); }
+else r.appendChild(bindEditableText({get:function(){return it.name;}, set:function(v){it.name=v;}}, {cls:'item-name-input'}));
 r.appendChild(bindMoneyNum({get:function(){return getBF(it.id,si);}, set:function(v){setBF(it.id,si,v);}}, {rerender:false, onChange:function(){
 var newTotal = sum(items.map(function(i2){return getBF(i2.id,si);}));
 totalSpan.textContent = fmtEUR(newTotal);
 refreshBudgetKPIs();
 }}));
-r.appendChild(deleteBtn('Eliminare la voce "'+it.name+'"? Verranno persi anche i relativi dati di consuntivo.', function(){ removeFixedItem(it.id); }));
+if(!scCat) r.appendChild(deleteBtn('Eliminare la voce "'+it.name+'"? Verranno persi anche i relativi dati di consuntivo.', function(){ removeFixedItem(it.id); }));
 det.appendChild(r);
 });
+if(scPrimary) det.appendChild(buildSiteChoiceManager(cat,[key]));
+else if(!scCat){
 var addItemBtn = el('button','small-btn', cat.perSite ? '+ aggiungi collaboratore' : '+ aggiungi voce');
 addItemBtn.style.marginTop='6px';
 addItemBtn.onclick = function(){ if(cat.perSite) addFixedItem(cat.id,'Nuovo collaboratore',si); else addFixedItem(cat.id,'Nuova voce'); render(); };
 det.appendChild(addItemBtn);
+}
 card1.appendChild(det);
 });
 var btnRow1 = el('div','btn-row');
@@ -2901,7 +3012,8 @@ card2.appendChild(el('div','notebox','Nessuna voce di costo fisso definita. Vai 
 }
 STATE.fixedCats.forEach(function(cat){
 var items = STATE.fixedItems.filter(function(it){return it.catId===cat.id && itemVisibleForSite(it,siteId);}).filter(function(it){return isFixedItemFilledSite(it.id, siteId);});
-if(items.length===0 && !cat.perSite) return;
+var scConsPrimary = isSiteChoiceCat(cat) && !STATE._editingArchivedYear && STATE.sites[0] && STATE.sites[0].id===siteId;
+if(items.length===0 && !cat.perSite && !scConsPrimary) return;
 var catTotal = sum(items.map(function(it){ return sum(consArrFixed(it.id,siteId)); }));
 var det = document.createElement('details'); det.className='cat-collapse';
 var detKey = 'cons_fixed_'+siteId+'_'+cat.id;
@@ -2947,6 +3059,10 @@ var newCatTotal = sum(items.map(function(i2){ return sum(consArrFixed(i2.id,site
 catTotalSpan.textContent = fmtEUR(newCatTotal);
 });
 });
+}
+if(isSiteChoiceCat(cat) && !STATE._editingArchivedYear){
+if(scConsPrimary) det.appendChild(buildSiteChoiceManager(cat,[detKey]));
+else det.appendChild(el('div','help-tip','Voci e sedi si gestiscono dalla scheda &laquo;'+(STATE.sites[0]?STATE.sites[0].name:'')+'&raquo;.'));
 }
 if(cat.perSite){
 var addStaffBtn = el('button','small-btn','+ aggiungi collaboratore');
