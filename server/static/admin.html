@@ -40,6 +40,13 @@ td{padding:8px; border-bottom:1px solid var(--border); vertical-align:middle;}
 pre.datajson{background:#1e2a30; color:#d7e6e4; padding:14px; border-radius:8px; font-size:11.5px; max-height:320px; overflow:auto; white-space:pre-wrap; word-break:break-word;}
 .kpi-mini{display:inline-block; background:#eef6f5; border-radius:7px; padding:6px 12px; margin:3px 6px 3px 0; font-size:12.5px;}
 .kpi-mini b{color:var(--navy);}
+.sso-row{display:flex;gap:14px;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--border);align-items:flex-start;}
+.sso-who{min-width:220px;flex:0 0 240px;display:flex;flex-direction:column;font-size:13px;}
+.sso-who span{color:var(--text-soft);font-size:12px;}
+.sso-cos{display:flex;gap:6px 14px;flex-wrap:wrap;flex:1;font-size:13px;}
+.sso-co{display:inline-flex;gap:6px;align-items:center;cursor:pointer;}
+.help-tip{font-size:12.5px;color:var(--text-soft);margin:0 0 12px;line-height:1.5;}
+.help-tip a{color:var(--teal);}
 </style>
 </head>
 <body>
@@ -59,12 +66,15 @@ var viewingData = null;
 var legalPrivacyText = '';
 var legalTermsText = '';
 var legalSaveMsg = '';
+var sso = {enabled:false, users:[]};
+function escH(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+async function loadSso(){ var r = await apiGet('/api/admin/sso-users'); if(r.ok) sso = r.data; }
 function el(tag,cls,html){ var e=document.createElement(tag); if(cls)e.className=cls; if(html!==undefined)e.innerHTML=html; return e; }
 async function boot(){
 var status = await apiGet('/api/admin/status');
 if(!status.ok){ view='login'; errMsg='Impossibile contattare il server.'; render(); return; }
 if(!status.data.configured){ view='setup'; render(); return; }
-if(status.data.loggedIn){ await loadCompanies(); await loadResetRequests(); await loadLegalContent(); view='panel'; render(); return; }
+if(status.data.loggedIn){ await loadCompanies(); await loadResetRequests(); await loadLegalContent(); await loadSso(); view='panel'; render(); return; }
 view='login'; render();
 }
 async function loadCompanies(){
@@ -110,7 +120,7 @@ if(inp.value.length<6){ errMsg='Almeno 6 caratteri.'; render(); return; }
 if(inp.value!==inp2.value){ errMsg='Le due password non coincidono.'; render(); return; }
 var r = await apiSend('/api/admin/setup','POST',{password:inp.value});
 if(!r.ok){ errMsg=(r.data&&r.data.error)||'Errore.'; render(); return; }
-await loadCompanies(); view='panel'; render();
+await loadCompanies(); await loadSso(); view='panel'; render();
 };
 box.appendChild(btn);
 return box;
@@ -128,7 +138,7 @@ async function doLogin(){
 errMsg='';
 var r = await apiSend('/api/admin/login','POST',{password:inp.value});
 if(!r.ok){ errMsg=(r.data&&r.data.error)||'Password errata.'; render(); return; }
-await loadCompanies(); view='panel'; render();
+await loadCompanies(); await loadSso(); view='panel'; render();
 }
 btn.onclick = doLogin;
 inp.addEventListener('keydown', function(ev){ if(ev.key==='Enter'){ ev.preventDefault(); doLogin(); } });
@@ -200,6 +210,35 @@ row.appendChild(genBtn); row.appendChild(dismissBtn);
 reqCard.appendChild(row);
 });
 frag.appendChild(reqCard);
+}
+
+if(sso.enabled){
+var ssoCard = el('div','card');
+ssoCard.appendChild(el('h2',null,'Persone del gruppo (accesso unico)'));
+ssoCard.appendChild(el('div','help-tip','Chi \u00e8 abilitato alla Gestione finanziaria su appgestione.it entra con la sua email e password. Qui scegli quali aziende pu\u00f2 aprire: se ne ha una sola entra direttamente, se ne ha pi\u00f9 di una sceglie all\u2019ingresso. Per aggiungere o togliere persone usa la <a href="'+escH(sso.manageUrl||'#')+'" target="_blank" rel="noopener">Gestione accessi</a>.'));
+if(sso.error) ssoCard.appendChild(el('div','notice err',escH(sso.error)));
+var approvedList = companies.filter(function(c){ return c.approved; });
+if(!sso.users.length){ ssoCard.appendChild(el('div','notice','Nessuna persona \u00e8 ancora abilitata a Finanza nella Gestione accessi.')); }
+sso.users.forEach(function(u){
+var row = el('div','sso-row');
+row.appendChild(el('div','sso-who','<b>'+escH(u.name||u.email)+'</b><span>'+escH(u.email)+(u.birthDate?' \u00b7 nato/a il '+escH(u.birthDate.split('-').reverse().join('/')):'')+'</span>'));
+var boxes = el('div','sso-cos');
+if(!approvedList.length) boxes.appendChild(el('span',null,'Nessuna azienda attiva.'));
+approvedList.forEach(function(c){
+var lab = el('label','sso-co');
+var cb = document.createElement('input'); cb.type='checkbox'; cb.checked = u.companies.indexOf(c.id) >= 0;
+cb.onchange = async function(){
+var next = approvedList.filter(function(x){ return x.id===c.id ? cb.checked : u.companies.indexOf(x.id) >= 0; }).map(function(x){ return x.id; });
+var r = await apiSend('/api/admin/sso-users/'+encodeURIComponent(u.id)+'/companies','PUT',{companies:next});
+if(r.ok){ u.companies = r.data.companies; } else { cb.checked = !cb.checked; alert((r.data&&r.data.error)||'Errore nel salvataggio.'); }
+};
+lab.appendChild(cb); lab.appendChild(document.createTextNode(' '+c.name));
+boxes.appendChild(lab);
+});
+row.appendChild(boxes);
+ssoCard.appendChild(row);
+});
+frag.appendChild(ssoCard);
 }
 
 var legalCard = el('div','card');

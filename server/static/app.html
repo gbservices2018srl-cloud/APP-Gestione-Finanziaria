@@ -202,6 +202,10 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 .reset-panel{border:1px solid #f0c4c0; background:#fdf3f2; border-radius:8px; padding:4px 14px 10px; margin-top:6px;}
 
 .auth-wrap{display:flex; align-items:flex-start; justify-content:center; padding-top:40px;}
+.sso-box{background:#eef6f5;border-radius:12px;padding:16px 18px;margin-bottom:18px;}
+.sso-title{font-weight:800;color:var(--teal);font-size:13px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;}
+.sso-btn{display:block;width:100%;margin-top:8px;}
+.sso-or{margin-top:4px;}
 .auth-box{background:#fff; border:1px solid var(--border); border-radius:14px; padding:32px 36px; max-width:440px; width:100%; box-shadow:0 10px 30px rgba(0,0,0,.06);}
 .auth-box h1.pagetitle{text-align:left;}
 .auth-form .input-row label{min-width:130px;}
@@ -623,6 +627,8 @@ var isLoggedIn = false;
 var companyDisplayName = '';
 var companyPlan = 'free';
 var loginError = '';
+var ssoInfo = null, ssoMode = false, ssoHome = '';
+function ssoEsc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 var showForgotPassword = false;
 var showRegister = false;
 var registerSent = false;
@@ -654,7 +660,7 @@ return {ok:res.ok, status:res.status, data:data};
 async function checkSession(){
 try{
 var r = await apiGet('/api/company/me');
-if(r.ok && r.data && r.data.loggedIn){ companyPlan = r.data.plan || 'free'; return r.data.name; }
+if(r.ok && r.data && r.data.loggedIn){ companyPlan = r.data.plan || 'free'; ssoMode = !!r.data.sso; ssoHome = r.data.ssoHome || ''; return r.data.name; }
 }catch(e){}
 return null;
 }
@@ -672,8 +678,22 @@ loginBusy = false; render();
 return false;
 }
 }
-async function companyLogout(){
+async function ssoEnter(companyId){
+loginBusy = true; render();
+var r = await apiSend('/api/sso/enter', 'POST', {company_id: companyId});
+loginBusy = false;
+if(!r.ok){ loginError = (r.data && r.data.error) || 'Accesso non riuscito.'; render(); return; }
+ssoMode = true; ssoHome = (ssoInfo && ssoInfo.home) || '';
+await bootAfterLogin(r.data.name);
+}
+async function loadSsoInfo(){
+try{ var r = await apiGet('/api/sso/status'); ssoInfo = r.ok ? r.data : null; }catch(e){ ssoInfo = null; }
+}
+async function companyLogout(goHome){
+var wasSso = ssoMode;
 try{ await apiSend('/api/company/logout', 'POST'); }catch(e){}
+ssoMode = false;
+if(goHome && wasSso && ssoHome){ location.href = ssoHome; return; }
 isLoggedIn = false; STATE = null; companyDisplayName=''; companyPlan='free';
 showForgotPassword=false; forgotPasswordSent=false;
 clearTimeout(inactivityTimer);
@@ -727,8 +747,12 @@ render();
 }
 async function bootApp(){
 var name = await checkSession();
-if(name){ await bootAfterLogin(name); }
-else { isLoggedIn = false; render(); }
+if(name){ await bootAfterLogin(name); return; }
+isLoggedIn = false;
+await loadSsoInfo();
+// persona del gruppo con una sola azienda assegnata: entra direttamente
+if(ssoInfo && ssoInfo.companies && ssoInfo.companies.length === 1){ await ssoEnter(ssoInfo.companies[0].id); return; }
+render();
 }
 function fmtEUR(n){ if(n===null||n===undefined||isNaN(n)) n=0; return n.toLocaleString('it-IT',{style:'currency',currency:'EUR',minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtEUR2(n){ if(n===null||n===undefined||isNaN(n)) n=0; return n.toLocaleString('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:2}); }
@@ -1663,7 +1687,7 @@ nav.appendChild(btn);
 var logoutBtn = document.createElement('button');
 logoutBtn.className = 'navbtn'; logoutBtn.style.opacity='.75';
 logoutBtn.innerHTML = '<span class="navico">&#8644;</span>Esci';
-logoutBtn.onclick = function(){ closeMobileMenu(); companyLogout(); };
+logoutBtn.onclick = function(){ closeMobileMenu(); companyLogout(true); };
 nav.appendChild(logoutBtn);
 }
 function openMobileMenu(){
@@ -2092,6 +2116,28 @@ wrap.appendChild(box);
 main.appendChild(wrap);
 return;
 }
+if(ssoInfo && ssoInfo.user){
+var sso = el('div','sso-box');
+var nm = ((ssoInfo.user.firstName||'')+' '+(ssoInfo.user.lastName||'')).trim() || ssoInfo.user.email;
+sso.appendChild(el('div','sso-title','Accesso To Smile'));
+sso.appendChild(el('p','pagesub', 'Sei collegato come <b>'+ssoEsc(nm)+'</b>.'));
+if(ssoInfo.denied){
+sso.appendChild(el('div','notebox','Non sei abilitato alla Gestione finanziaria. Chiedi all\u2019amministratore di attivartela.'));
+} else if(!ssoInfo.companies || !ssoInfo.companies.length){
+sso.appendChild(el('div','notebox','Non hai ancora aziende assegnate: l\u2019amministratore le sceglie dal Pannello Master.'));
+} else {
+sso.appendChild(el('p','pagesub','Scegli l\u2019azienda da aprire:'));
+ssoInfo.companies.forEach(function(c){
+var b = el('button','btn sso-btn', 'Apri \u00ab'+ssoEsc(c.name)+'\u00bb');
+b.disabled = loginBusy;
+b.onclick = function(){ loginError=''; ssoEnter(c.id); };
+sso.appendChild(b);
+});
+}
+if(ssoInfo.home){ var back = el('div',null,'<a href="'+ssoEsc(ssoInfo.home)+'" style="font-size:12.5px;color:var(--teal);">\u2190 Torna alle tue app</a>'); back.style.marginTop='10px'; sso.appendChild(back); }
+box.appendChild(sso);
+box.appendChild(el('p','pagesub sso-or','Oppure entra con l\u2019account dell\u2019azienda:'));
+}
 box.appendChild(el('h1','pagetitle','Accedi'));
 box.appendChild(el('p','pagesub','Inserisci il nome della tua azienda e la password per continuare.'));
 var nameRow = el('div','input-row');
@@ -2127,9 +2173,15 @@ registerLink.style.cssText = 'margin-top:8px;text-align:center;';
 registerLink.innerHTML = '<a href="#" style="font-size:12.5px;color:var(--teal);">Non hai un account? Richiedine uno</a>';
 registerLink.querySelector('a').onclick = function(ev){ ev.preventDefault(); showRegister=true; registerStep='form'; pendingReg={name:'',email:'',phone:'',password:'',acceptedPrivacy:false}; loginError=''; render(); };
 box.appendChild(registerLink);
+if(ssoInfo && ssoInfo.enabled && !ssoInfo.user && ssoInfo.loginUrl){
+var grp = document.createElement('div');
+grp.style.cssText = 'margin-top:16px;padding-top:14px;border-top:1px solid var(--border,#e2dde3);text-align:center;';
+grp.innerHTML = '<a href="'+ssoEsc(ssoInfo.loginUrl)+'" style="font-size:12.5px;color:var(--teal);font-weight:700;">Fai parte del gruppo To Smile? Entra con il tuo accesso unico</a>';
+box.appendChild(grp);
+}
 wrap.appendChild(box);
 main.appendChild(wrap);
-setTimeout(function(){ nameInp.focus(); }, 30);
+if(!(ssoInfo && ssoInfo.user)) setTimeout(function(){ nameInp.focus(); }, 30);
 }
 function el(tag, cls, html){
 var e = document.createElement(tag);

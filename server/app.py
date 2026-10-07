@@ -22,6 +22,7 @@ import secrets
 import smtplib
 import datetime
 import html as html_module
+import urllib.parse
 from email.mime.text import MIMEText
 from flask import Flask, request, jsonify, session, g, send_from_directory, redirect
 try:
@@ -139,6 +140,14 @@ def init_db():
             resolved INTEGER NOT NULL DEFAULT 0
         )"""
     )
+    # accesso unico del gruppo (appgestione.it): quali aziende vede ogni persona
+    db.execute(
+        """CREATE TABLE IF NOT EXISTS sso_company_links (
+            sso_user_id TEXT NOT NULL,
+            company_id TEXT NOT NULL,
+            PRIMARY KEY (sso_user_id, company_id)
+        )"""
+    )
     db.execute(
         """CREATE TABLE IF NOT EXISTS password_reset_tokens (
             token TEXT PRIMARY KEY,
@@ -191,7 +200,70 @@ def require_admin():
 
 
 def require_company():
-    return session.get("role") == "company" and session.get("company_id")
+    if not (session.get("role") == "company" and session.get("company_id")):
+        return False
+    # Chi e' entrato con l'accesso unico viene ricontrollato ogni minuto:
+    # se l'amministratore lo disattiva o gli toglie l'azienda, esce subito.
+    if session.get("sso_uid"):
+        import time
+        if time.time() - float(session.get("sso_checked") or 0) > 60:
+            u = sso_current_user()
+            if not u or u.get("id") != session.get("sso_uid") or session.get("company_id") not in sso_company_ids(u["id"]):
+                session.clear()
+                return False
+            session["sso_checked"] = time.time()
+    return True
+
+
+# ---------------------------------------------------------------- accesso unico (appgestione.it)
+# Le persone del gruppo entrano con la loro email e password di appgestione.it.
+# Il cookie "ag_sso" vale per tutti i sottodomini: qui lo facciamo verificare
+# al servizio dell'accesso unico, con la chiave condivisa SSO_API_KEY.
+# I clienti esterni (registrazione + Stripe) continuano a entrare come prima.
+SSO_URL = os.environ.get("SSO_URL", "https://appgestione.it").rstrip("/")
+SSO_COOKIE = "ag_sso"
+
+
+def sso_enabled():
+    return bool(os.environ.get("SSO_API_KEY"))
+
+
+def sso_call(path, payload):
+    import urllib.request as _rq
+    import urllib.error as _er
+    req = _rq.Request(SSO_URL + path, data=json.dumps(payload).encode("utf-8"), method="POST", headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + os.environ.get("SSO_API_KEY", ""),
+    })
+    try:
+        with _rq.urlopen(req, timeout=15) as r:
+            return r.status, json.loads(r.read().decode("utf-8") or "{}")
+    except _er.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read().decode("utf-8") or "{}")
+        except Exception:
+            return e.code, {}
+    except Exception as e:
+        print("Accesso unico non raggiungibile:", e)
+        return 0, {}
+
+
+def sso_check():
+    """(stato, dati): 200 = puo' entrare in Finanza, 403 = collegato ma senza Finanza, altro = non collegato."""
+    token = request.cookies.get(SSO_COOKIE)
+    if not token or not sso_enabled():
+        return 401, {}
+    return sso_call("/api/sso/verify", {"token": token, "app": "finanza"})
+
+
+def sso_current_user():
+    code, data = sso_check()
+    return data.get("user") if code == 200 else None
+
+
+def sso_company_ids(uid):
+    rows = get_db().execute("SELECT company_id FROM sso_company_links WHERE sso_user_id=?", (uid,)).fetchall()
+    return [r["company_id"] for r in rows]
 
 
 DEFAULT_PRIVACY_TEXT = """Bozza — da far rivedere da un consulente privacy o da un avvocato prima della pubblicazione definitiva.
@@ -523,6 +595,7 @@ def admin_delete_company(cid):
         return json_error("Non autorizzato.", 401)
     db = get_db()
     db.execute("DELETE FROM companies WHERE id=?", (cid,))
+    db.execute("DELETE FROM sso_company_links WHERE company_id=?", (cid,))
     db.commit()
     return jsonify({"ok": True})
 
@@ -649,6 +722,88 @@ def admin_view_company_data(cid):
 
 
 # =============================================================== COMPANY
+@app.route("/api/sso/status", methods=["GET"])
+def sso_status():
+    """Per la pagina di accesso: la persona e' gia' collegata ad appgestione.it? Quali aziende puo' aprire?"""
+    out = {"enabled": sso_enabled(), "home": SSO_URL,
+           "loginUrl": SSO_URL + "/accedi?next=" + urllib.parse.quote(request.host_url, safe="")}
+    if not sso_enabled():
+        return jsonify(out)
+    code, data = sso_check()
+    if code == 403:
+        out.update({"user": data.get("user"), "denied": True})
+    elif code == 200:
+        u = data["user"]
+        ids = sso_company_ids(u["id"])
+        rows = get_db().execute(
+            "SELECT id, name FROM companies WHERE approved=1 AND suspended=0 AND id IN (%s) ORDER BY name" % ",".join("?" * len(ids)),
+            ids).fetchall() if ids else []
+        out.update({"user": u, "companies": [dict(r) for r in rows]})
+    return jsonify(out)
+
+
+@app.route("/api/sso/enter", methods=["POST"])
+def sso_enter():
+    import time
+    body = request.get_json(force=True, silent=True) or {}
+    code, data = sso_check()
+    if code != 200:
+        return json_error("Accedi prima da appgestione.it." if code != 403 else "Non sei abilitato alla Gestione finanziaria.", 401)
+    u = data["user"]
+    ids = sso_company_ids(u["id"])
+    cid = body.get("company_id") or (ids[0] if len(ids) == 1 else None)
+    if not cid or cid not in ids:
+        return json_error("Scegli un'azienda tra quelle assegnate.", 400)
+    row = get_db().execute("SELECT id, name, approved FROM companies WHERE id=?", (cid,)).fetchone()
+    if row is None or not row["approved"]:
+        return json_error("Azienda non disponibile.", 404)
+    session.clear()
+    session.permanent = True
+    session["role"] = "company"
+    session["company_id"] = row["id"]
+    ok, err = check_company_access()
+    if not ok:
+        return err
+    session["sso_uid"] = u["id"]
+    session["sso_checked"] = time.time()
+    return jsonify({"ok": True, "name": row["name"]})
+
+
+@app.route("/api/admin/sso-users", methods=["GET"])
+def admin_sso_users():
+    """Persone abilitate a Finanza nell'accesso unico, con le aziende assegnate."""
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    if not sso_enabled():
+        return jsonify({"enabled": False, "users": []})
+    code, data = sso_call("/api/sso/users", {"app": "finanza"})
+    if code != 200:
+        return jsonify({"enabled": True, "error": "Accesso unico non raggiungibile, riprova tra poco.", "users": []})
+    users = data.get("users", [])
+    links = {}
+    for r in get_db().execute("SELECT sso_user_id, company_id FROM sso_company_links").fetchall():
+        links.setdefault(r["sso_user_id"], []).append(r["company_id"])
+    return jsonify({"enabled": True, "manageUrl": SSO_URL + "/admin", "users": [
+        {"id": u["id"], "name": (u.get("firstName", "") + " " + u.get("lastName", "")).strip(), "email": u.get("email"),
+         "birthDate": u.get("birthDate"), "companies": links.get(u["id"], [])} for u in users]})
+
+
+@app.route("/api/admin/sso-users/<uid>/companies", methods=["PUT"])
+def admin_set_sso_companies(uid):
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    body = request.get_json(force=True, silent=True) or {}
+    ids = [str(x) for x in (body.get("companies") or [])][:200]
+    db = get_db()
+    valid = {r["id"] for r in db.execute("SELECT id FROM companies").fetchall()}
+    db.execute("DELETE FROM sso_company_links WHERE sso_user_id=?", (uid[:64],))
+    for cid in ids:
+        if cid in valid:
+            db.execute("INSERT OR IGNORE INTO sso_company_links (sso_user_id, company_id) VALUES (?,?)", (uid[:64], cid))
+    db.commit()
+    return jsonify({"ok": True, "companies": [c for c in ids if c in valid]})
+
+
 @app.route("/api/company/login", methods=["POST"])
 def company_login():
     body = request.get_json(force=True, silent=True) or {}
@@ -951,7 +1106,8 @@ def company_me():
     if row is None:
         session.clear()
         return jsonify({"loggedIn": False})
-    return jsonify({"loggedIn": True, "name": row["name"], "plan": row["plan"] or "free"})
+    return jsonify({"loggedIn": True, "name": row["name"], "plan": row["plan"] or "free",
+                    "sso": bool(session.get("sso_uid")), "ssoHome": SSO_URL if session.get("sso_uid") else None})
 
 
 @app.route("/api/company/data", methods=["GET"])
