@@ -776,8 +776,8 @@ def create_checkout_session():
                 "type": "text",
                 "optional": False
             }],
-            success_url=request.host_url.rstrip("/") + "/finanziario?checkout=success",
-            cancel_url=request.host_url.rstrip("/") + "/finanziario?checkout=cancel",
+            success_url=request.host_url.rstrip("/") + "/?checkout=success",
+            cancel_url=request.host_url.rstrip("/") + "/?checkout=cancel",
         )
         return jsonify({"url": checkout_session.url})
     except Exception as e:
@@ -1047,7 +1047,7 @@ def company_forgot_password():
             (token, row["id"], now_iso(), expires)
         )
         db.commit()
-        reset_link = request.host_url.rstrip("/") + "/finanziario?reset=" + token
+        reset_link = request.host_url.rstrip("/") + "/?reset=" + token
         send_email_safe(
             row["email"],
             "Reimposta la password - " + row["name"],
@@ -1102,19 +1102,19 @@ def company_reset_password_with_token():
 
 
 # ---------------------------------------------------------------- static
-# L'app finanziaria vive su /finanziario (cosi' la radice del dominio resta libera
-# per collegare altre app, es. /altra-app). La radice, per ora, rimanda a /finanziario
-# conservando i parametri (?reset=..., ?checkout=...) cosi' i vecchi link continuano a funzionare.
-@app.route("/finanziario", methods=["GET"])
-@app.route("/finanziario/", methods=["GET"])
-def serve_finanziario():
+# L'app vive sulla radice del suo sottodominio (finanza.appgestione.it), non sotto un percorso.
+@app.route("/", methods=["GET"])
+def serve_index():
     return send_from_directory(STATIC_DIR, "app.html")
 
 
-@app.route("/", methods=["GET"])
-def serve_index():
+# Solo compatibilita': il percorso /finanziario (usato per un paio di giorni) rimanda alla radice
+# conservando i parametri (?reset=..., ?checkout=...), cosi' i link gia' inviati continuano a funzionare.
+@app.route("/finanziario", methods=["GET"])
+@app.route("/finanziario/", methods=["GET"])
+def legacy_finanziario():
     qs = request.query_string.decode("utf-8", "ignore")
-    return redirect("/finanziario" + ("?" + qs if qs else ""), code=302)
+    return redirect("/" + ("?" + qs if qs else ""), code=302)
 
 
 @app.route("/admin", methods=["GET"])
