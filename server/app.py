@@ -1341,6 +1341,124 @@ def proxy_ticketassistenza(sub=""):
     return out
 
 
+# ---------------------------------------------------------------- trasloco del disco (es. da Oregon a Francoforte)
+# Vecchio servizio: con TRASLOCO_KEY impostata espone GET /api/_trasloco/export (solo lettura): una copia coerente
+# del database (backup SQLite) + gli altri file del disco, in un .tar.gz con l'elenco delle righe di ogni tabella.
+# Nuovo servizio: con COPIA_DA (indirizzo dell'export) e TRASLOCO_KEY, all'avvio scarica la copia, controlla impronta,
+# integrita' del database e numero di righe tabella per tabella; solo se tutto torna la mette sul disco.
+# Il database gia' presente sul nuovo disco non viene mai cancellato: viene rinominato. Senza le variabili non fa nulla.
+# MANUTENZIONE=true sul vecchio servizio: nessuno scrive piu' (pagina di attesa), l'export resta disponibile.
+import hashlib, tarfile, tempfile, shutil, io as _io
+
+def _trasloco_chiave_ok(req):
+    key = os.environ.get("TRASLOCO_KEY", "")
+    given = (req.headers.get("Authorization") or "").replace("Bearer ", "", 1)
+    return len(key) >= 24 and secrets.compare_digest(given, key)
+
+def _conta_righe(db_path):
+    con = sqlite3.connect(db_path)
+    try:
+        tabelle = [r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+        return {tb: con.execute('SELECT COUNT(*) FROM "%s"' % tb.replace('"', '""')).fetchone()[0] for tb in tabelle}
+    finally:
+        con.close()
+
+@app.before_request
+def _manutenzione():
+    if os.environ.get("MANUTENZIONE") == "true" and request.path not in ("/api/_trasloco/export", "/healthz"):
+        return ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
+                "<title>Aggiornamento in corso</title><body style='font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:90vh;text-align:center'>"
+                "<div><h1>Stiamo aggiornando la Gestione finanziaria</h1><p>Torniamo tra pochi minuti. I dati sono al sicuro: riprova un po' piu' tardi.</p></div>",
+                503, {"Retry-After": "600", "Cache-Control": "no-store"})
+
+@app.route("/api/_trasloco/export", methods=["GET"])
+def _trasloco_export():
+    if not _trasloco_chiave_ok(request):
+        return jsonify({"error": "Non autorizzato"}), 401
+    tmp = tempfile.mkdtemp()
+    try:
+        copia = os.path.join(tmp, "data.db")
+        src = sqlite3.connect(DB_PATH)
+        dst = sqlite3.connect(copia)
+        with dst:
+            src.backup(dst)  # copia coerente anche mentre il server lavora
+        dst.close(); src.close()
+        manifest = {"creato": datetime.datetime.utcnow().isoformat() + "Z", "righe": _conta_righe(copia), "altri_file": []}
+        buf = _io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            tar.add(copia, arcname="data.db")
+            for nome in sorted(os.listdir(DATA_DIR)):
+                pieno = os.path.join(DATA_DIR, nome)
+                if nome.startswith("data.db") or nome.startswith(".trasloco") or nome in ("lost+found",):
+                    continue
+                tar.add(pieno, arcname="altri/" + nome)
+                manifest["altri_file"].append(nome)
+            m = json.dumps(manifest, ensure_ascii=False).encode()
+            info = tarfile.TarInfo("manifest.json"); info.size = len(m)
+            tar.addfile(info, _io.BytesIO(m))
+        dati = buf.getvalue()
+        print("Trasloco: export di %d byte, righe %s" % (len(dati), manifest["righe"]), flush=True)
+        return dati, 200, {"Content-Type": "application/gzip", "X-Sha256": hashlib.sha256(dati).hexdigest(), "Cache-Control": "no-store"}
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+def _trasloco_import():
+    url, key = os.environ.get("COPIA_DA", "").strip(), os.environ.get("TRASLOCO_KEY", "")
+    if not url or len(key) < 24:
+        return
+    os.makedirs(DATA_DIR, exist_ok=True)
+    marcatore = os.path.join(DATA_DIR, ".trasloco_ok")
+    if os.path.exists(marcatore) and os.environ.get("COPIA_FORZA") != "true":
+        print("Trasloco: gia' fatto, non ricopio (togli COPIA_DA).", flush=True)
+        return
+    import urllib.request as _rq
+    print("Trasloco: scarico la copia dal vecchio servizio (sola lettura)...", flush=True)
+    req = _rq.Request(url, headers={"Authorization": "Bearer " + key})
+    with _rq.urlopen(req, timeout=300) as r:
+        dati = r.read()
+        atteso = r.headers.get("X-Sha256", "")
+    if hashlib.sha256(dati).hexdigest() != atteso:
+        raise RuntimeError("Trasloco: impronta diversa, copia scartata")
+    tmp = tempfile.mkdtemp(dir=DATA_DIR)
+    try:
+        with tarfile.open(fileobj=_io.BytesIO(dati), mode="r:gz") as tar:
+            for m in tar.getmembers():
+                if m.name.startswith("/") or ".." in m.name.split("/") or not (m.isfile() or m.isdir()):
+                    raise RuntimeError("Trasloco: archivio non valido")
+            tar.extractall(tmp)
+        manifest = json.load(open(os.path.join(tmp, "manifest.json")))
+        nuovo = os.path.join(tmp, "data.db")
+        con = sqlite3.connect(nuovo)
+        ok = con.execute("PRAGMA integrity_check").fetchone()[0]
+        con.close()
+        if ok != "ok":
+            raise RuntimeError("Trasloco: database copiato non integro (%s)" % ok)
+        righe = _conta_righe(nuovo)
+        if righe != manifest["righe"]:
+            raise RuntimeError("Trasloco: righe diverse %s / %s" % (righe, manifest["righe"]))
+        # il database che c'era sul nuovo disco (vuoto, creato all'avvio) non si cancella: si rinomina
+        stamp = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
+        for suff in ("", "-wal", "-shm"):
+            if os.path.exists(DB_PATH + suff):
+                os.replace(DB_PATH + suff, DB_PATH + suff + ".prima-del-trasloco-" + stamp)
+        os.replace(nuovo, DB_PATH)
+        for nome in manifest.get("altri_file", []):
+            sorgente = os.path.join(tmp, "altri", nome)
+            if os.path.exists(sorgente):
+                dest = os.path.join(DATA_DIR, nome)
+                if os.path.exists(dest):
+                    os.replace(dest, dest + ".prima-del-trasloco-" + stamp)
+                os.replace(sorgente, dest)
+        tot = sum(righe.values())
+        with open(marcatore, "w") as f:
+            json.dump({"fatto": datetime.datetime.utcnow().isoformat() + "Z", "righe": righe, "altri_file": manifest.get("altri_file", [])}, f)
+        print("Trasloco: OK · %d tabelle, %d righe, %d altri file · %s" % (len(righe), tot, len(manifest.get("altri_file", [])), righe), flush=True)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+_trasloco_import()
+
 init_db()
 
 if __name__ == "__main__":
