@@ -2857,6 +2857,12 @@ totBtn.onclick = function(){ currentBudgetSite='TOTAL'; render(); };
 totRow.appendChild(totBtn);
 main.appendChild(totRow);
 }
+/* in cima a ogni scheda: come sta andando rispetto a questo budget (totale azienda o sola sede). Non nella bozza dell'anno dopo o in un anno archiviato. */
+if(!STATE._editingNextYearBudget && (STATE._editingArchivedYear===null || STATE._editingArchivedYear===undefined) && (currentBudgetSite==='TOTAL' || findSite(currentBudgetSite))){
+var cruBox = el('div','card'); cruBox.style.background='#fbfafc';
+renderCruscotto(cruBox, currentBudgetSite==='TOTAL' ? null : currentBudgetSite);
+main.appendChild(cruBox);
+}
 if(currentBudgetSite==='TOTAL'){
 renderBudgetTotale(main);
 return;
