@@ -29,6 +29,33 @@
   --font-brand: 'Poppins', sans-serif;
   --font-body: 'Nunito Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
+
+/* Cruscotto del Riepilogo: i numeri chiave dell'anno, a oggi e a fine anno, con lo scostamento dal budget */
+.cru-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;justify-content:space-between;margin:4px 0 12px;}
+.cru-head h2{font-family:var(--font-brand);font-size:19px;margin:0;color:var(--navy);}
+.cru-when{font-size:12.5px;color:var(--text-soft);background:var(--card);border:1px solid var(--border);border-radius:999px;padding:4px 12px;}
+.cru-group{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-soft);margin:14px 0 8px;}
+.cru-grid{display:grid;gap:12px;grid-template-columns:repeat(4,minmax(0,1fr));}
+.cru-grid.tre{grid-template-columns:repeat(3,minmax(0,1fr));}
+.cru{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:4px;min-width:0;position:relative;overflow:hidden;}
+.cru::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--cru-c,var(--teal));}
+.cru.stima{background:repeating-linear-gradient(135deg,#fff 0 10px,#fbfafc 10px 20px);}
+.cru .l{font-size:12.5px;font-weight:700;color:var(--text-soft);}
+.cru .l small{font-weight:600;opacity:.85}
+.cru .v{font-family:var(--font-brand);font-size:27px;font-weight:700;color:var(--navy);line-height:1.15;letter-spacing:-.01em;overflow-wrap:anywhere;}
+.cru .v.pos{color:var(--green);} .cru .v.neg{color:var(--red);}
+.cru .s{font-size:12.5px;color:var(--text-soft);line-height:1.4;}
+.cru .d{display:inline-flex;align-items:center;gap:4px;font-weight:700;border-radius:999px;padding:1px 8px;font-size:12px;white-space:nowrap;}
+.cru .d.good{background:#e3f2e8;color:#2c6b43;} .cru .d.bad{background:#f8e1df;color:#9a3128;} .cru .d.flat{background:#efedf0;color:var(--text-soft);}
+.cru .meter{height:7px;border-radius:99px;background:#eeeaef;overflow:hidden;margin:6px 0 2px;position:relative;}
+.cru .meter i{position:absolute;left:0;top:0;bottom:0;background:var(--teal);border-radius:99px;}
+.cru .meter b{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--navy);}
+.cru-more{margin-top:10px;font-size:12.5px;color:var(--text-soft);}
+.cru-more summary{cursor:pointer;font-weight:700;}
+.cru-more .cru-grid{margin-top:8px;}
+@media (max-width:1000px){.cru-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.cru-grid.tre{grid-template-columns:repeat(3,minmax(0,1fr));}}
+@media (max-width:700px){.cru-grid.tre{grid-template-columns:1fr;}}
+@media (max-width:460px){.cru-grid{grid-template-columns:1fr;}.cru .v{font-size:24px;}}
 *{box-sizing:border-box;}
 body{
   margin:0;
@@ -2440,6 +2467,102 @@ noBtn.onclick = closeAppModal;
 inp.addEventListener('keydown', function(ev){ if(ev.key==='Enter'){ ev.preventDefault(); tryConfirm(); } if(ev.key==='Escape') closeAppModal(); });
 overlay.addEventListener('click', function(ev){ if(ev.target===overlay) closeAppModal(); });
 }
+/* ===== Cruscotto del Riepilogo =====
+   A oggi = mesi compilati nel Consuntivo; a fine anno = stima con lo stesso ritmo dei mesi compilati (media mensile x 12).
+   Budget = pagina Budget costi (fatturato stimato, costi fissi con ammortamenti, % costi variabili). siteId null = tutta l'azienda. */
+function datiCruscotto(siteId){
+var ids = siteId ? [siteId] : STATE.sites.map(function(x){return x.id;});
+var r = {fatt:0,fissi:0,vari:0,fattP:0,fissiP:0,variP:0,budFattPeriodo:0,mcMax:0,mcMin:12};
+ids.forEach(function(id){
+var mc = mesiCompilati(id), f=0, fi=0, v=0;
+for(var m=0;m<mc;m++){ f+=consRevenueMonthSite(id,m); fi+=consFixedTotalMonthSite(id,m); v+=consVarTotalMonthSite(id,m); }
+r.fatt+=f; r.fissi+=fi; r.vari+=v;
+if(mc>0){ r.fattP+=f/mc*12; r.fissiP+=fi/mc*12; r.variP+=v/mc*12; }
+r.budFattPeriodo += (Number(STATE.budget.revenue[id])||0)*mc;
+r.mcMax = Math.max(r.mcMax, mc); r.mcMin = Math.min(r.mcMin, mc);
+});
+if(!ids.length) r.mcMin = 0;
+var b = siteId ? calcBudgetSite(siteId) : calcBudgetAll().tot;
+r.budFattAnno = b.revenue*12;
+r.budIncFissi = safeDiv(b.totFixedMese, b.revenue);
+r.budIncVar = safeDiv(b.varSum, b.revenue);
+r.budMdcPct = b.revenue ? 1-r.budIncVar : 0;
+r.budUtileAnno = (b.revenue - b.varSum - b.totFixedMese)*12;
+r.bep = b.bepMese*12; r.target = b.targetMese;
+r.utile = r.fatt-r.fissi-r.vari; r.utileP = r.fattP-r.fissiP-r.variP;
+r.incFissi = safeDiv(r.fissi, r.fatt); r.incVar = safeDiv(r.vari, r.fatt);
+r.mdc = r.fatt-r.vari; r.mdcPct = safeDiv(r.mdc, r.fatt);
+r.haBudget = b.revenue>0;
+return r;
+}
+function renderCruscotto(main, siteId){
+var d = datiCruscotto(siteId);
+var head = el('div','cru-head');
+head.appendChild(el('h2',null,'Come sta andando il '+STATE.currentYear+(siteId?' &mdash; '+findSite(siteId).name:'')));
+head.appendChild(el('span','cru-when', d.mcMax ? ('Dati fino a <b>'+MONTHS[d.mcMax-1]+'</b> &middot; '+d.mcMax+' mes'+(d.mcMax===1?'e':'i')+' compilat'+(d.mcMax===1?'o':'i')+(d.mcMin!==d.mcMax?' (non tutte le sedi sono allo stesso mese)':'')) : 'Nessun mese compilato nel Consuntivo'));
+main.appendChild(head);
+if(!d.mcMax){
+main.appendChild(el('div','notebox','&#9888;&#65039; Compila almeno un mese nel <b>Consuntivo mensile</b>: qui vedrai fatturato, utile, incidenza dei costi e margine, a oggi e a fine anno.'));
+}
+// scostamento: in percentuale per gli importi, in punti per le incidenze. meglio = verso giusto (piu' fatturato, meno costi)
+function dEuro(att, bud, piuEMeglio){
+if(!bud) return '';
+var p = (att-bud)/Math.abs(bud), su = p>=0;
+var cls = Math.abs(p)<0.005 ? 'flat' : ((su===piuEMeglio)?'good':'bad');
+return '<span class="d '+cls+'">'+(Math.abs(p)<0.005?'&#61; in linea':(su?'&#9650; +':'&#9660; &minus;')+fmtPct(Math.abs(p)))+'</span>';
+}
+function dPunti(att, bud){
+if(!d.haBudget) return '<span class="d flat">budget non impostato</span>';
+var p = (att-bud)*100, cls = Math.abs(p)<0.05 ? 'flat' : (p>0?'bad':'good');
+return '<span class="d '+cls+'">'+(Math.abs(p)<0.05?'&#61; in linea':(p>0?'&#9650; +':'&#9660; &minus;')+Math.abs(p).toFixed(1)+' punti')+'</span>';
+}
+function tile(o){
+var t = el('div','cru'+(o.stima?' stima':''));
+if(o.c) t.style.setProperty('--cru-c', o.c);
+t.appendChild(el('div','l', o.l));
+t.appendChild(el('div','v'+(o.vc?' '+o.vc:''), o.v));
+if(o.meter) t.appendChild(el('div','meter', o.meter));
+if(o.s) t.appendChild(el('div','s', o.s));
+if(o.title) t.title = o.title;
+return t;
+}
+main.appendChild(el('div','cru-group','Fatturato e utile'));
+var g1 = el('div','cru-grid');
+var pctAnno = d.budFattAnno ? Math.min(d.fatt/d.budFattAnno,1) : 0, pctProi = d.budFattAnno ? Math.min(d.fattP/d.budFattAnno,1) : 0;
+g1.appendChild(tile({ l:'Fatturato a oggi', v:fmtEUR(d.fatt), c:'var(--teal)',
+meter: d.budFattAnno ? '<i style="width:'+(pctAnno*100).toFixed(1)+'%"></i>' : '',
+s: d.budFattAnno ? (fmtPct(d.fatt/d.budFattAnno,0)+' del budget annuo &middot; rispetto al budget del periodo '+dEuro(d.fatt, d.budFattPeriodo, true)) : 'Imposta il fatturato stimato nel Budget per il confronto.' }));
+g1.appendChild(tile({ l:'Fatturato a fine anno <small>(stima)</small>', v:fmtEUR(d.fattP), c:'var(--teal)', stima:true,
+s: d.budFattAnno ? ('Budget annuo '+fmtEUR(d.budFattAnno)+' '+dEuro(d.fattP, d.budFattAnno, true)) : 'Al ritmo dei mesi compilati.' }));
+g1.appendChild(tile({ l:'Utile a oggi', v:fmtEUR(d.utile), vc: d.utile>=0?'pos':'neg', c: d.utile>=0?'var(--green)':'var(--red)',
+s: (d.fatt ? fmtPct(d.utile/d.fatt)+' del fatturato' : '&nbsp;') }));
+g1.appendChild(tile({ l:'Utile a fine anno <small>(stima)</small>', v:fmtEUR(d.utileP), vc: d.utileP>=0?'pos':'neg', c: d.utileP>=0?'var(--green)':'var(--red)', stima:true,
+s: d.haBudget ? ('Budget '+fmtEUR(d.budUtileAnno)+' '+dEuro(d.utileP, d.budUtileAnno, true)) : 'Al ritmo dei mesi compilati.' }));
+main.appendChild(g1);
+main.appendChild(el('div','cru-group','Costi e margine <span style="text-transform:none;letter-spacing:0;font-weight:600">&middot; sul fatturato a oggi</span>'));
+var g2 = el('div','cru-grid tre');
+g2.appendChild(tile({ l:'Incidenza costi fissi', v:fmtPct(d.incFissi), c:'var(--navy)',
+s: (d.haBudget ? 'Budget '+fmtPct(d.budIncFissi)+' ' : '')+dPunti(d.incFissi, d.budIncFissi),
+title:'Costi fissi a oggi ('+fmtEUR(d.fissi)+') diviso fatturato a oggi' }));
+g2.appendChild(tile({ l:'Incidenza costi variabili', v:fmtPct(d.incVar), c:'var(--purple)',
+s: (d.haBudget ? 'Budget '+fmtPct(d.budIncVar)+' ' : '')+dPunti(d.incVar, d.budIncVar),
+title:'Costi variabili a oggi ('+fmtEUR(d.vari)+') diviso fatturato a oggi' }));
+var mdcDelta = d.haBudget ? (function(){ var p=(d.mdcPct-d.budMdcPct)*100, cls=Math.abs(p)<0.05?'flat':(p>0?'good':'bad');
+return '<span class="d '+cls+'">'+(Math.abs(p)<0.05?'&#61; in linea':(p>0?'&#9650; +':'&#9660; &minus;')+Math.abs(p).toFixed(1)+' punti')+'</span>'; })() : '';
+g2.appendChild(tile({ l:'Margine di contribuzione', v:fmtEUR(d.mdc), c:'var(--amber)',
+s: fmtPct(d.mdcPct)+' del fatturato'+(d.haBudget ? ' &middot; budget '+fmtPct(d.budMdcPct)+' '+mdcDelta : ''),
+title:'Fatturato a oggi meno costi variabili a oggi: quello che resta per coprire i costi fissi e fare utile' }));
+main.appendChild(g2);
+var more = document.createElement('details'); more.className = 'cru-more';
+more.innerHTML = '<summary>Altri indicatori</summary>';
+var g3 = el('div','cru-grid');
+g3.appendChild(tile({ l:'Punto di pareggio annuo (budget)', v:fmtEUR(d.bep), c:'#9b8fa0', s:'Fatturato che serve per coprire tutti i costi' }));
+g3.appendChild(tile({ l:'Target mensile', v:fmtEUR(d.target), c:'#9b8fa0', s:'Pareggio + guadagno desiderato' }));
+g3.appendChild(tile({ l:'Costi fissi a oggi', v:fmtEUR(d.fissi), c:'#9b8fa0', s:'A fine anno (stima) '+fmtEUR(d.fissiP) }));
+g3.appendChild(tile({ l:'Costi variabili a oggi', v:fmtEUR(d.vari), c:'#9b8fa0', s:'A fine anno (stima) '+fmtEUR(d.variP) }));
+more.appendChild(g3);
+main.appendChild(more);
+}
 RENDERERS.dashboard = function(main){
 main.appendChild(el('h1','pagetitle','Riepilogo generale'));
 main.appendChild(el('p','pagesub','Vista d\u2019insieme su budget, consuntivo e andamento di '+STATE.sites.length+' sed'+(STATE.sites.length===1?'e':'i')+'.'));
@@ -2472,22 +2595,7 @@ var budget = calcBudgetAll();
 var scost = scostamentiSummary();
 var ce = calcContoEconomico();
 var mc = scost.mc;
-var kpis = el('div','kpi-grid');
-function kpi(label,value,sub,subclass){
-var k = el('div','kpi'); k.appendChild(el('div','label',label)); k.appendChild(el('div','value',value));
-if(sub) k.appendChild(el('div','sub '+(subclass||''),sub));
-return k;
-}
-kpis.appendChild(kpi('Fatturato incassato (YTD)', fmtEUR(scost.fatturatoYtd), mc+' mesi compilati'));
-kpis.appendChild(kpi('Proiezione fatturato annuo', fmtEUR(scost.fatturatoProiezione)));
-var risSegno = ce.cumRis>=0?'pos':'neg';
-kpis.appendChild(kpi('Risultato netto (YTD)', fmtEUR(ce.cumRis), ce.cumRis>=0?'in utile':'in perdita', risSegno));
-kpis.appendChild(kpi('Budget costi fissi annuo', fmtEUR(budget.tot.totFixedMese*12)));
-kpis.appendChild(kpi('Incidenza costi fissi/FT', fmtPct(scost.incFissiMedia), 'media periodo compilato'));
-kpis.appendChild(kpi('MDC % media', fmtPct(scost.mdcPctMedia)));
-kpis.appendChild(kpi('Nuovo BEP annuo stimato', fmtEUR(scost.nuovoBepAnnuo)));
-kpis.appendChild(kpi('Target mensile (tutte le sedi)', fmtEUR(budget.tot.targetMese)));
-main.appendChild(kpis);
+renderCruscotto(main, null);
 var two = el('div','two-col');
 var c1 = el('div','card'); c1.appendChild(el('h2',null,'Fatturato vs Costi &mdash; mese per mese'));
 c1.appendChild(el('div','help-tip','Clicca una colonna per aprire il Consuntivo mensile di quel mese.'));
@@ -2570,21 +2678,7 @@ var fattArr = MONTHS.map(function(_,m){ return consRevenueMonthSite(siteId,m); }
 var fissiArr = MONTHS.map(function(_,m){ return consFixedTotalMonthSite(siteId,m); });
 var variArr = MONTHS.map(function(_,m){ return consVarTotalMonthSite(siteId,m); });
 var risNetto = sum(fattArr)-sum(fissiArr)-sum(variArr);
-var kpis = el('div','kpi-grid');
-function kpi(label,value,sub,subclass){
-var k = el('div','kpi'); k.appendChild(el('div','label',label)); k.appendChild(el('div','value',value));
-if(sub) k.appendChild(el('div','sub '+(subclass||''),sub));
-return k;
-}
-kpis.appendChild(kpi('Fatturato incassato (YTD) &mdash; '+site.name, fmtEUR(scost.fatturatoYtd), mc+' mesi compilati'));
-kpis.appendChild(kpi('Proiezione fatturato annuo', fmtEUR(scost.fatturatoProiezione)));
-kpis.appendChild(kpi('Risultato netto (YTD)', fmtEUR(risNetto), risNetto>=0?'in utile':'in perdita', risNetto>=0?'pos':'neg'));
-kpis.appendChild(kpi('Budget costi fissi annuo', fmtEUR(calcB.totFixedMese*12)));
-kpis.appendChild(kpi('Incidenza costi fissi/FT', fmtPct(scost.incFissiMedia), 'media periodo compilato'));
-kpis.appendChild(kpi('MDC % media', fmtPct(scost.mdcPctMedia)));
-kpis.appendChild(kpi('Nuovo BEP annuo stimato', fmtEUR(scost.nuovoBepAnnuo)));
-kpis.appendChild(kpi('Target mensile', fmtEUR(calcB.targetMese)));
-main.appendChild(kpis);
+renderCruscotto(main, siteId);
 var two = el('div','two-col');
 var c1 = el('div','card'); c1.appendChild(el('h2',null,'Fatturato vs Costi &mdash; mese per mese'));
 c1.appendChild(el('div','help-tip','Clicca una colonna per aprire il Consuntivo mensile di quel mese, per questa sede.'));
