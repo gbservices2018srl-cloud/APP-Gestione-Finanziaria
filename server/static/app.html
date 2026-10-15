@@ -3654,8 +3654,27 @@ impBtnRow.appendChild(confirmBtn); impBtnRow.appendChild(cancelImpBtn);
 impCard.appendChild(impBtnRow);
 main.appendChild(impCard);
 }
-var costoFissoUnitPct = calcBudgetAll().tot.incFissiBudget;
-var margini = STATE.listino.map(function(r){ return calcListinoRow(r, costoFissoUnitPct).margine; });
+var budgetTot = calcBudgetAll().tot;
+var costoFissoUnitPct = budgetTot.incFissiBudget;
+/* Riquadro: da dove arriva l'incidenza dei costi fissi usata per ogni voce (budget di tutta l'azienda) */
+var incBox = el('div','notebox');
+var incMsg;
+if(budgetTot.revenue>0 && budgetTot.totFixedMese>0){
+incMsg = 'Costo fisso di ogni prestazione = tariffa &times; <b>'+fmtPct(costoFissoUnitPct,2)+'</b>, cio&egrave; l\'incidenza dei costi fissi dell\'azienda nel Budget (tutte le sedi): costi fissi '+fmtEUR(budgetTot.totFixedMese)+' al mese (ammortamenti compresi) su un fatturato stimato di '+fmtEUR(budgetTot.revenue)+' al mese.';
+} else if(!(budgetTot.revenue>0)){
+incMsg = '&#9888; <b>Il costo fisso delle prestazioni non pu&ograve; essere calcolato</b>: nel Budget manca il <b>fatturato stimato mensile</b> delle sedi. Inseriscilo nella pagina Budget costi (scheda di ogni sede): l\'incidenza dei costi fissi verr&agrave; applicata qui in automatico.';
+incBox.style.borderColor = '#d97706';
+} else {
+incMsg = '&#9888; <b>Il costo fisso delle prestazioni &egrave; zero</b> perch&eacute; nel Budget non ci sono costi fissi inseriti. Compilali nella pagina Budget costi: l\'incidenza verr&agrave; applicata qui in automatico.';
+incBox.style.borderColor = '#d97706';
+}
+incBox.innerHTML = incMsg+' ';
+var goBudget = el('button','small-btn','Apri il Budget');
+goBudget.style.marginLeft = '6px';
+goBudget.onclick = function(){ navigateToBudgetSite('TOTAL'); };
+incBox.appendChild(goBudget);
+main.appendChild(incBox);
+var margini =STATE.listino.map(function(r){ return calcListinoRow(r, costoFissoUnitPct).margine; });
 var margineMedio = margini.length ? sum(margini)/margini.length : 0;
 var listinoKpis = el('div','kpi-grid');
 var mk = el('div','kpi');
