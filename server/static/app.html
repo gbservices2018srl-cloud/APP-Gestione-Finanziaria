@@ -2492,6 +2492,8 @@ r.bep = b.bepMese*12; r.target = b.targetMese;
 r.utile = r.fatt-r.fissi-r.vari; r.utileP = r.fattP-r.fissiP-r.variP;
 r.incFissi = safeDiv(r.fissi, r.fatt); r.incVar = safeDiv(r.vari, r.fatt);
 r.mdc = r.fatt-r.vari; r.mdcPct = safeDiv(r.mdc, r.fatt);
+// BEP attuale: fatturato annuo che copre i costi fissi (al ritmo attuale) con il margine di contribuzione attuale
+r.bepAtt = r.mdcPct>0 ? r.fissiP/r.mdcPct : 0;
 r.haBudget = b.revenue>0;
 return r;
 }
@@ -2540,7 +2542,7 @@ g1.appendChild(tile({ l:'Utile a fine anno <small>(stima)</small>', v:fmtEUR(d.u
 s: d.haBudget ? ('Budget '+fmtEUR(d.budUtileAnno)+' '+dEuro(d.utileP, d.budUtileAnno, true)) : 'Al ritmo dei mesi compilati.' }));
 main.appendChild(g1);
 main.appendChild(el('div','cru-group','Costi e margine <span style="text-transform:none;letter-spacing:0;font-weight:600">&middot; sul fatturato a oggi</span>'));
-var g2 = el('div','cru-grid tre');
+var g2 = el('div','cru-grid');
 g2.appendChild(tile({ l:'Incidenza costi fissi', v:fmtPct(d.incFissi), c:'var(--navy)',
 s: (d.haBudget ? 'Budget '+fmtPct(d.budIncFissi)+' ' : '')+dPunti(d.incFissi, d.budIncFissi),
 title:'Costi fissi a oggi ('+fmtEUR(d.fissi)+') diviso fatturato a oggi' }));
@@ -2552,11 +2554,14 @@ return '<span class="d '+cls+'">'+(Math.abs(p)<0.05?'&#61; in linea':(p>0?'&#965
 g2.appendChild(tile({ l:'Margine di contribuzione', v:fmtEUR(d.mdc), c:'var(--amber)',
 s: fmtPct(d.mdcPct)+' del fatturato'+(d.haBudget ? ' &middot; budget '+fmtPct(d.budMdcPct)+' '+mdcDelta : ''),
 title:'Fatturato a oggi meno costi variabili a oggi: quello che resta per coprire i costi fissi e fare utile' }));
+g2.appendChild(tile({ l:'Punto di pareggio (BEP) attuale', v: d.bepAtt ? fmtEUR(d.bepAtt) : '&mdash;', c:'var(--red)',
+s: (d.bepAtt ? (d.fattP ? (d.fattP>=d.bepAtt ? 'Superato: a fine anno lo superi di '+fmtEUR(d.fattP-d.bepAtt) : 'A fine anno mancano '+fmtEUR(d.bepAtt-d.fattP)) : '') : 'Serve almeno un mese con fatturato.')
+ + (d.haBudget && d.bep && d.bepAtt ? '<br>Budget '+fmtEUR(d.bep)+' '+dEuro(d.bepAtt, d.bep, false) : ''),
+title:'Fatturato annuo che serve per coprire tutti i costi: costi fissi annui (al ritmo attuale) diviso margine di contribuzione %' }));
 main.appendChild(g2);
 var more = document.createElement('details'); more.className = 'cru-more';
 more.innerHTML = '<summary>Altri indicatori</summary>';
 var g3 = el('div','cru-grid');
-g3.appendChild(tile({ l:'Punto di pareggio annuo (budget)', v:fmtEUR(d.bep), c:'#9b8fa0', s:'Fatturato che serve per coprire tutti i costi' }));
 g3.appendChild(tile({ l:'Target mensile', v:fmtEUR(d.target), c:'#9b8fa0', s:'Pareggio + guadagno desiderato' }));
 g3.appendChild(tile({ l:'Costi fissi a oggi', v:fmtEUR(d.fissi), c:'#9b8fa0', s:'A fine anno (stima) '+fmtEUR(d.fissiP) }));
 g3.appendChild(tile({ l:'Costi variabili a oggi', v:fmtEUR(d.vari), c:'#9b8fa0', s:'A fine anno (stima) '+fmtEUR(d.variP) }));
