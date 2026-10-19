@@ -3192,6 +3192,9 @@ body += '<tr><td>'+(cat.perSite ? '<input type="text" data-role="name" data-i="'
 for(var mm2=0;mm2<12;mm2++){ body += '<td><span class="money-cell"><input type="number" data-i="'+it.id+'" data-m="'+mm2+'" value="'+(vals[mm2]||'')+'"/></span></td>'; }
 body += '<td id="rowtot_cf_'+siteId+'_'+it.id+'">'+fmtEUR(sum(vals))+'</td>'+(cat.perSite ? '<td><button class="small-btn" data-role="del" data-i="'+it.id+'">rimuovi</button></td>' : '')+'</tr>';
 });
+var mesiCatF = function(){ var a=[]; for(var q=0;q<12;q++){ a.push(sum(items.map(function(i2){ return consArrFixed(i2.id,siteId)[q]||0; }))); } return a; };
+var idTotF = 'mtot_cf_'+siteId+'_'+cat.id;
+body += rigaTotaleMacro(cat.name, mesiCatF(), idTotF, cat.perSite ? '<td></td>' : '');
 table.innerHTML = '<thead>'+head+'</thead><tbody>'+body+'</tbody>';
 wrap.appendChild(table); det.appendChild(wrap);
 table.querySelectorAll('input[data-role=name]').forEach(function(inp){
@@ -3210,6 +3213,7 @@ var rowTotEl = document.getElementById('rowtot_cf_'+siteId+'_'+iid);
 if(rowTotEl) rowTotEl.textContent = fmtEUR(sum(arr));
 var newCatTotal = sum(items.map(function(i2){ return sum(consArrFixed(i2.id,siteId)); }));
 catTotalSpan.textContent = fmtEUR(newCatTotal);
+aggiornaRigaTotaleMacro(idTotF, mesiCatF());
 });
 });
 }
@@ -3282,6 +3286,9 @@ body2 += '<tr><td style="text-align:left;white-space:nowrap;">'+String(sup.name)
 for(var m5=0;m5<12;m5++){ body2 += '<td><span class="money-cell"><input type="number" data-role="val" data-sid="'+sup.id+'" data-m="'+m5+'" value="'+(sup.values[m5]||'')+'"/></span></td>'; }
 body2 += '<td id="rowtot_sup_'+sup.id+'">'+fmtEUR(sum(sup.values))+'</td></tr>';
 });
+var mesiCatV = function(){ var a=[]; for(var q=0;q<12;q++) a.push(consVarCatMonth(c.id,siteId,q)); return a; };
+var idTotV = 'mtot_cv_'+siteId+'_'+c.id;
+body2 += rigaTotaleMacro(c.name, mesiCatV(), idTotV);
 table2.innerHTML = '<thead>'+head2+'</thead><tbody>'+body2+'</tbody>';
 wrap2.appendChild(table2); det.appendChild(wrap2);
 wrap2.style.marginBottom='4px';
@@ -3294,6 +3301,7 @@ saveState();
 var rowTotEl = document.getElementById('rowtot_sup_'+sup.id);
 if(rowTotEl) rowTotEl.textContent = fmtEUR(sum(sup.values));
 refreshCatTotal();
+aggiornaRigaTotaleMacro(idTotV, mesiCatV());
 }
 });
 });
@@ -3395,6 +3403,8 @@ rowTot+=v; cells += '<td>'+fmtEUR(v)+'</td>';
 }
 body += '<tr><td>'+itemLabel(it)+'</td>'+cells+'<td>'+fmtEUR(rowTot)+'</td></tr>';
 });
+var mesiTotF=[]; for(var q=0;q<12;q++){ var vq=0; items.forEach(function(it){ STATE.sites.forEach(function(s){ vq+=consFixedMonth(it.id,s.id,q); }); }); mesiTotF.push(vq); }
+body += rigaTotaleMacro(cat.name, mesiTotF);
 table.innerHTML = '<thead>'+head+'</thead><tbody>'+body+'</tbody>';
 wrap.appendChild(table); det.appendChild(wrap);
 card2.appendChild(det);
@@ -3417,6 +3427,16 @@ wrap.appendChild(table); det.appendChild(wrap);
 card3.appendChild(det);
 });
 main.appendChild(card3);
+}
+// Riga in fondo a ogni macro-voce: somma per mese delle voci (quanto speso nella macro-voce in quel mese)
+function rigaTotaleMacro(label, mesi, idBase, extraTd){
+var r='<tr class="total-row"><td style="text-align:left;white-space:nowrap;">Totale '+String(label).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</td>';
+for(var i=0;i<12;i++) r+='<td'+(idBase?' id="'+idBase+'_'+i+'"':'')+'>'+fmtEUR(mesi[i]||0)+'</td>';
+return r+'<td'+(idBase?' id="'+idBase+'_tot"':'')+'>'+fmtEUR(sum(mesi))+'</td>'+(extraTd||'')+'</tr>';
+}
+function aggiornaRigaTotaleMacro(idBase, mesi){
+for(var i=0;i<12;i++){ var e=document.getElementById(idBase+'_'+i); if(e) e.textContent=fmtEUR(mesi[i]||0); }
+var t=document.getElementById(idBase+'_tot'); if(t) t.textContent=fmtEUR(sum(mesi));
 }
 function consVarTotalOfCatAllSites(catId,m){ var t=0; STATE.sites.forEach(function(s){ t+=consVarCatMonth(catId,s.id,m); }); return t; }
 function consArrFixed(itemId,siteId){
