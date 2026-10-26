@@ -1261,7 +1261,9 @@ def company_reset_password_with_token():
 # L'app vive sulla radice del suo sottodominio (finanza.appgestione.it), non sotto un percorso.
 @app.route("/", methods=["GET"])
 def serve_index():
-    return send_from_directory(STATIC_DIR, "app.html")
+    r = send_from_directory(STATIC_DIR, "app.html")
+    r.headers["Cache-Control"] = "no-cache"  # sempre la versione aggiornata dell'app
+    return r
 
 
 # Solo compatibilita': il percorso /finanziario (usato per un paio di giorni) rimanda alla radice

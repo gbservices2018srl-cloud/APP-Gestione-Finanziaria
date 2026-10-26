@@ -1741,7 +1741,7 @@ var _ultimaPagina = null;
 function render(){
 var stessa = isLoggedIn && _ultimaPagina === currentPage;
 var y = window.scrollY, x = [];
-if(stessa) document.querySelectorAll('#main .table-scroll').forEach(function(t){ x.push(t.scrollLeft); });
+if(stessa) document.querySelectorAll('#main .table-scroll').forEach(function(t){ x.push([t.scrollLeft, t.scrollTop]); }); // le tabelle scorrono anche in verticale (max 70% dello schermo)
 var main0 = document.getElementById('main');
 if(stessa && main0) main0.style.minHeight = main0.offsetHeight + 'px'; // evita il salto in alto mentre si ridisegna
 try { renderPagina(); }
@@ -1749,7 +1749,7 @@ finally {
 if(main0) main0.style.minHeight = '';
 _ultimaPagina = isLoggedIn ? currentPage : null;
 if(stessa){
-document.querySelectorAll('#main .table-scroll').forEach(function(t, i){ if(x[i]) t.scrollLeft = x[i]; });
+document.querySelectorAll('#main .table-scroll').forEach(function(t, i){ if(x[i]){ t.scrollLeft = x[i][0]; t.scrollTop = x[i][1]; } });
 window.scrollTo(0, y);
 } else window.scrollTo(0, 0);
 }
