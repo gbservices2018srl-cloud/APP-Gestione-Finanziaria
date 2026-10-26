@@ -3777,17 +3777,22 @@ impCard.appendChild(impBtnRow);
 main.appendChild(impCard);
 }
 var budgetTot = calcBudgetAll().tot;
-var costoFissoUnitPct = budgetTot.incFissiBudget;
-/* Riquadro: da dove arriva l'incidenza dei costi fissi usata per ogni voce (budget di tutta l'azienda) */
+// incidenza dei costi fissi: quella scritta a mano (se c'è) oppure quella del Budget di tutta l'azienda
+var incManuale = (typeof STATE.listinoIncFissiManuale === 'number' && isFinite(STATE.listinoIncFissiManuale)) ? STATE.listinoIncFissiManuale : null;
+var costoFissoUnitPct = incManuale !== null ? incManuale : budgetTot.incFissiBudget;
+/* Riquadro: da dove arriva l'incidenza dei costi fissi usata per ogni voce */
 var incBox = el('div','notebox');
 var incMsg;
-if(budgetTot.revenue>0 && budgetTot.totFixedMese>0){
+var budgetMsg = (budgetTot.revenue>0 && budgetTot.totFixedMese>0) ? fmtPct(budgetTot.incFissiBudget,2)+' (costi fissi '+fmtEUR(budgetTot.totFixedMese)+' al mese su un fatturato stimato di '+fmtEUR(budgetTot.revenue)+')' : 'non calcolabile';
+if(incManuale !== null){
+incMsg = 'Costo fisso di ogni prestazione = tariffa &times; <b>'+fmtPct(incManuale,2)+'</b>, l\'incidenza che hai <b>inserito a mano</b>. Quella del Budget sarebbe '+budgetMsg+'. Svuota la casella per tornare a usare il Budget.';
+} else if(budgetTot.revenue>0 && budgetTot.totFixedMese>0){
 incMsg = 'Costo fisso di ogni prestazione = tariffa &times; <b>'+fmtPct(costoFissoUnitPct,2)+'</b>, cio&egrave; l\'incidenza dei costi fissi dell\'azienda nel Budget (tutte le sedi): costi fissi '+fmtEUR(budgetTot.totFixedMese)+' al mese (ammortamenti compresi) su un fatturato stimato di '+fmtEUR(budgetTot.revenue)+' al mese.';
 } else if(!(budgetTot.revenue>0)){
-incMsg = '&#9888; <b>Il costo fisso delle prestazioni non pu&ograve; essere calcolato</b>: nel Budget manca il <b>fatturato stimato mensile</b> delle sedi. Inseriscilo nella pagina Budget costi (scheda di ogni sede): l\'incidenza dei costi fissi verr&agrave; applicata qui in automatico.';
+incMsg = '&#9888; <b>Il costo fisso delle prestazioni non pu&ograve; essere calcolato</b>: nel Budget manca il <b>fatturato stimato mensile</b> delle sedi. Inseriscilo nella pagina Budget costi (scheda di ogni sede), oppure scrivi l\'incidenza a mano qui sotto.';
 incBox.style.borderColor = '#d97706';
 } else {
-incMsg = '&#9888; <b>Il costo fisso delle prestazioni &egrave; zero</b> perch&eacute; nel Budget non ci sono costi fissi inseriti. Compilali nella pagina Budget costi: l\'incidenza verr&agrave; applicata qui in automatico.';
+incMsg = '&#9888; <b>Il costo fisso delle prestazioni &egrave; zero</b> perch&eacute; nel Budget non ci sono costi fissi inseriti. Compilali nella pagina Budget costi, oppure scrivi l\'incidenza a mano qui sotto.';
 incBox.style.borderColor = '#d97706';
 }
 incBox.innerHTML = incMsg+' ';
@@ -3795,6 +3800,22 @@ var goBudget = el('button','small-btn','Apri il Budget');
 goBudget.style.marginLeft = '6px';
 goBudget.onclick = function(){ navigateToBudgetSite('TOTAL'); };
 incBox.appendChild(goBudget);
+var manRow = el('div','input-row'); manRow.style.marginTop = '10px';
+manRow.appendChild(el('label',null,'Incidenza costi fissi inserita a mano (%)'));
+var manInp = document.createElement('input');
+manInp.type = 'number'; manInp.min = 0; manInp.max = 100; manInp.step = '0.01'; manInp.style.width = '110px';
+manInp.placeholder = budgetTot.revenue>0 ? (Math.round(budgetTot.incFissiBudget*10000)/100)+' (Budget)' : 'dal Budget';
+manInp.value = incManuale !== null ? String(Math.round(incManuale*10000)/100) : '';
+manInp.addEventListener('change', function(){
+var raw = String(manInp.value).trim().replace(',', '.');
+var v = parseFloat(raw);
+if(raw === '' || isNaN(v)) STATE.listinoIncFissiManuale = null;
+else STATE.listinoIncFissiManuale = Math.max(0, Math.min(100, v))/100;
+saveState(); render();
+});
+manRow.appendChild(manInp);
+manRow.appendChild(el('span','help-tip','Se la compili, tutte le prestazioni usano questo valore; se la lasci vuota, si usa quello del Budget.'));
+incBox.appendChild(manRow);
 main.appendChild(incBox);
 var margini =STATE.listino.map(function(r){ return calcListinoRow(r, costoFissoUnitPct).margine; });
 var margineMedio = margini.length ? sum(margini)/margini.length : 0;
