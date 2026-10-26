@@ -1735,7 +1735,26 @@ function toggleMobileMenu(){
 var sb = document.getElementById('sidebar');
 if(sb && sb.classList.contains('open')) closeMobileMenu(); else openMobileMenu();
 }
+// Ridisegnando la stessa pagina (dopo una modifica) si resta dove si era: posizione della pagina
+// e scorrimento orizzontale delle tabelle; cambiando pagina invece si riparte dall'alto.
+var _ultimaPagina = null;
 function render(){
+var stessa = isLoggedIn && _ultimaPagina === currentPage;
+var y = window.scrollY, x = [];
+if(stessa) document.querySelectorAll('#main .table-scroll').forEach(function(t){ x.push(t.scrollLeft); });
+var main0 = document.getElementById('main');
+if(stessa && main0) main0.style.minHeight = main0.offsetHeight + 'px'; // evita il salto in alto mentre si ridisegna
+try { renderPagina(); }
+finally {
+if(main0) main0.style.minHeight = '';
+_ultimaPagina = isLoggedIn ? currentPage : null;
+if(stessa){
+document.querySelectorAll('#main .table-scroll').forEach(function(t, i){ if(x[i]) t.scrollLeft = x[i]; });
+window.scrollTo(0, y);
+} else window.scrollTo(0, 0);
+}
+}
+function renderPagina(){
 buildNav();
 updateBranding();
 var main = document.getElementById('main');
