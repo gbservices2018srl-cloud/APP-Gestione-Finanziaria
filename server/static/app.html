@@ -3841,6 +3841,13 @@ searchRow.appendChild(searchInp);
 var addBtn = el('button','btn','+ Nuova prestazione'); addBtn.style.marginLeft='12px';
 addBtn.onclick = function(){ STATE.listino.unshift({id:uid('lst'), label:'Nuova prestazione', tariffa:0, tempo:0, materiali:0, lab:0, percProf:0, costoProf:0}); saveState(); render(); };
 searchRow.appendChild(addBtn);
+var sortBtn = el('button','btn secondary','Ordina dalla A alla Z'); sortBtn.style.marginLeft='8px';
+sortBtn.title = 'Riordina tutte le voci del listino in ordine alfabetico';
+sortBtn.onclick = function(){
+STATE.listino.sort(function(a,b){ return String(a.label||'').trim().localeCompare(String(b.label||'').trim(), 'it', {sensitivity:'base', numeric:true}); });
+saveState(); flashStatus('Listino in ordine alfabetico'); render();
+};
+searchRow.appendChild(sortBtn);
 main.appendChild(searchRow);
 var firstListinoId = STATE.listino.length ? STATE.listino[0].id : null;
 var selRow = el('div','btn-row');
