@@ -1394,7 +1394,8 @@ var splitTotal = (Number(STATE.incassi.splitPVest[siteId])||0)+(Number(STATE.inc
 return {target:target, ov:ov, pvEst:pvEst, pvInt:pvInt, ovInt:ovInt, nc:nc, splitTotal:splitTotal};
 }
 function calcListinoRow(row, costoFissoUnitPct){
-var costoFisso = row.tariffa * costoFissoUnitPct;
+// voce senza costo fisso (es. prestazioni adiuvanti a una terapia): non le si attribuisce quota di costi fissi
+var costoFisso = row.senzaFissi ? 0 : row.tariffa * costoFissoUnitPct;
 var costoProf = row.percProf>0 ? (row.tariffa-(row.lab||0))*row.percProf : (row.costoProf||0);
 var totVar = costoProf + (row.lab||0) + (row.materiali||0);
 var incCostiVar = safeDiv(totVar, row.tariffa);
@@ -3683,9 +3684,9 @@ RENDERERS.listino = function(main){
 main.appendChild(el('h1','pagetitle','Listino prezzi & margini'));
 main.appendChild(el('p','pagesub','Per ogni prestazione: tariffa, tempo di lavorazione e costi, con calcolo automatico di margine di contribuzione, punto di pareggio e guadagno al minuto.'));
 var csvBtn = makeCsvDownloadButton('Scarica Excel (CSV)', function(){
-var headers = ['Prestazione','Tariffa (\u20ac)','Tempo (min)','Materiali (\u20ac)','Laboratorio (\u20ac)','% Professionista','Costo prof. fisso (\u20ac)'];
+var headers = ['Prestazione','Tariffa (\u20ac)','Tempo (min)','Materiali (\u20ac)','Laboratorio (\u20ac)','% Professionista','Costo prof. fisso (\u20ac)','Costo fisso applicato'];
 var rows = STATE.listino.map(function(r){
-return [r.label, r.tariffa, r.tempo, r.materiali, r.lab, Math.round(r.percProf*1000)/10, r.costoProf];
+return [r.label, r.tariffa, r.tempo, r.materiali, r.lab, Math.round(r.percProf*1000)/10, r.costoProf, r.senzaFissi ? 'no' : 's\u00ec'];
 });
 downloadCsv('listino_prezzi_'+(new Date().toISOString().slice(0,10))+'.csv', headers, rows);
 });
@@ -3872,7 +3873,7 @@ main.appendChild(selRow);
 var card = el('div','card');
 var wrap = el('div','table-scroll');
 var table = document.createElement('table'); table.className='datatable';
-var head = '<tr><th></th><th>Prestazione</th><th>Tariffa</th><th>Tempo (min)</th><th>Materiali</th><th>Lab.</th><th>% Prof.</th><th>Costo prof. fisso</th><th>Costo fisso</th><th>Costi var. tot.</th><th>Costi totali</th><th>MDC</th><th>MDC%</th><th>BEP prest.</th><th>EBIT</th><th>Margine%</th><th>&euro;/min</th><th></th></tr>';
+var head = '<tr><th></th><th>Prestazione</th><th>Tariffa</th><th>Tempo (min)</th><th>Materiali</th><th>Lab.</th><th>% Prof.</th><th>Costo prof. fisso</th><th title="Togli la spunta per le voci che non devono portare costi fissi (es. adiuvanti a una terapia)">Applica costo fisso</th><th>Costo fisso</th><th>Costi var. tot.</th><th>Costi totali</th><th>MDC</th><th>MDC%</th><th>BEP prest.</th><th>EBIT</th><th>Margine%</th><th>&euro;/min</th><th></th></tr>';
 var body = '';
 var filtered = STATE.listino.filter(function(r){ return !listinoFilter || r.label.toLowerCase().indexOf(listinoFilter.toLowerCase())>=0; });
 filtered.forEach(function(row){
@@ -3889,7 +3890,8 @@ body += '<tr>'+
 (row.percProf>0
 ? '<td><span class="money-cell" title="Calcolato in automatico: (tariffa - lab) &times; % prof.">'+fmtEUR2(c.costoProf)+'</span></td>'
 : '<td><span class="money-cell"><input type="number" data-id="'+row.id+'" data-f="costoProf" value="'+row.costoProf+'"/></span></td>')+
-'<td>'+fmtEUR2(c.costoFisso)+'</td><td>'+fmtEUR2(c.totVar)+'</td><td>'+fmtEUR2(c.costiTotali)+'</td>'+
+'<td style="text-align:center;"><input type="checkbox" data-nofissi="'+row.id+'" '+(row.senzaFissi?'':'checked')+' title="Applica il costo fisso a questa voce" style="width:auto;"/></td>'+
+'<td>'+(row.senzaFissi?'<span style="color:var(--text-soft);" title="Voce esclusa dai costi fissi">escluso</span>':fmtEUR2(c.costoFisso))+'</td><td>'+fmtEUR2(c.totVar)+'</td><td>'+fmtEUR2(c.costiTotali)+'</td>'+
 '<td>'+fmtEUR2(c.mdc)+'</td><td>'+fmtPct(c.mdcPct)+'</td><td>'+fmtEUR2(c.bepPrestazione)+'</td>'+
 '<td class="'+(c.ebit>=0?'pos':'neg')+'">'+fmtEUR2(c.ebit)+'</td><td>'+fmtPct(c.margine)+'</td><td>'+fmtEUR2(c.guadagnoMinuto)+'</td>'+
 '<td><button class="small-btn" data-dup="'+row.id+'" style="margin-right:4px;">DUPLICA</button><button class="small-btn" data-del="'+row.id+'">&times;</button></td></tr>';
@@ -3897,7 +3899,15 @@ body += '<tr>'+
 table.innerHTML = '<thead>'+head+'</thead><tbody>'+body+'</tbody>';
 wrap.appendChild(table); card.appendChild(wrap);
 main.appendChild(card);
-table.querySelectorAll('input').forEach(function(inp){
+table.querySelectorAll('input[data-nofissi]').forEach(function(cb){
+cb.addEventListener('change', function(){
+var row = STATE.listino.find(function(r){return r.id===cb.dataset.nofissi;});
+if(!row) return;
+if(cb.checked) delete row.senzaFissi; else row.senzaFissi = true;
+saveState(); render();
+});
+});
+table.querySelectorAll('input[data-f]').forEach(function(inp){
 function apply(){
 var id = inp.dataset.id, f = inp.dataset.f;
 var row = STATE.listino.find(function(r){return r.id===id;});
