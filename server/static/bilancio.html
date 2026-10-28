@@ -173,7 +173,7 @@ const IC = {
 };
 const ic = n => `<svg viewBox="0 0 24 24" aria-hidden="true">${IC[n]}</svg>`;
 
-/* ---------- riclassificazione (modello Gasparotto) ---------- */
+/* ---------- riclassificazione per aree del conto economico ---------- */
 const AREE = [
   { k: 'ricavi', l: 'Ricavi delle prestazioni', lato: 'ricavo' },
   { k: 'rimIn', l: 'Rimanenze iniziali', lato: 'costo', natura: true },
@@ -630,8 +630,7 @@ function pImpostazioni(S) {
     Utile = risultato della gestione + altri ricavi − costi extra − imposte<br>
     Costi fissi / variabili = somma delle voci classificate (extra gestione e imposte escluse)<br>
     Margine di contribuzione % = 1 − costi variabili / fatturato<br>
-    Break even point = costi fissi / margine di contribuzione % · Data di pareggio = 1 gennaio + (BEP / fatturato) × giorni dell'anno</div>
-    <p class="muted" style="font-size:12.5px;margin:10px 0 0">Impostazione ispirata al modello di controllo di gestione di Gasparotto: conto economico riclassificato per aree, costi fissi e variabili, punto di pareggio aziendale.</p></div>` : ''}`;
+    Break even point = costi fissi / margine di contribuzione % · Data di pareggio = 1 gennaio + (BEP / fatturato) × giorni dell'anno</div></div>` : ''}`;
 }
 
 /* ---------- grafici ---------- */
