@@ -394,7 +394,24 @@ async function cancello() {
 
 /* ---------- impaginazione ---------- */
 const PAGINE = [['cruscotto', 'Cruscotto KPI'], ['budget', 'Budget'], ['consuntivo', 'Consuntivo'], ['scostamenti', 'Scostamenti'], ['impostazioni', 'Impostazioni']];
+// Dopo una modifica la pagina resta dov'era: posizione della pagina, scorrimento delle tabelle e campo attivo
+let SNAP = null;
+const istantanea = () => ({ t: Date.now(), y: window.scrollY, x: window.scrollX, pag: PAGE, tab: [...document.querySelectorAll('#main .table-scroll')].map(t => [t.scrollTop, t.scrollLeft]) });
+// la posizione si fotografa nel momento della modifica (prima che Tab sposti il fuoco e la pagina)
+document.addEventListener('change', () => { SNAP = istantanea(); }, true);
 function render() {
+  const pos = SNAP && Date.now() - SNAP.t < 1000 ? SNAP : istantanea(); SNAP = null;
+  const ae = document.activeElement, chiave = ae && ae !== document.body ? [...ae.attributes].filter(x => x.name.startsWith('data-')).map(x => `[${x.name}="${CSS.escape(x.value)}"]`).join('') : '';
+  const h = $('#main').offsetHeight; $('#main').style.minHeight = h + 'px'; // niente salto mentre si ridisegna
+  disegna();
+  if (pos.pag === PAGE) {
+    document.querySelectorAll('#main .table-scroll').forEach((t, i) => { if (pos.tab[i]) { t.scrollTop = pos.tab[i][0]; t.scrollLeft = pos.tab[i][1]; } });
+    window.scrollTo(pos.x, pos.y);
+    if (chiave) { const el = document.querySelector('#main ' + chiave); if (el) { el.focus({ preventScroll: true }); if (el.select && el.tagName === 'INPUT') try { el.select(); } catch {} } }
+  }
+  requestAnimationFrame(() => { $('#main').style.minHeight = ''; });
+}
+function disegna() {
   CHARTS.forEach(c => c.destroy()); CHARTS = [];
   const nuove = voci().filter(v => v.nuova).length, daCl = voci().filter(v => AREA[v.area]?.natura && !v.natura).length;
   $('#azn').textContent = ME.azienda || '';
@@ -722,16 +739,16 @@ document.addEventListener('change', e => {
   const t = e.target, d = t.dataset;
   if (t.id === 'pdfin') return leggiPdf(t.files[0], PDF_PER);
   if (!ME.admin) return;
-  if (d.area) { const v = D.voci[d.area]; v.area = t.value; if (AREA[v.area].natura && !v.natura) v.natura = proponi(v).natura; if (!AREA[v.area].natura) v.natura = ''; v.proposta = false; salva(); return render(); }
+  if (d.area) { const v = D.voci[d.area]; v.area = t.value; if (AREA[v.area].natura && !v.natura) v.natura = proponi(v).natura; if (!AREA[v.area].natura) v.natura = ''; v.proposta = false; salva(); return setTimeout(render); }
   if (d.bm) { // valore di partenza sensato per il metodo scelto
     const S = scenari(), r = { metodo: t.value };
     if (r.metodo === 'importo') r.valore = Math.round(S.bud[d.bm] || base(d.bm));
     if (r.metodo === 'perc') r.valore = 0;
     if (r.metodo === 'incidenza') r.valore = S.base.fatt ? Math.round(base(d.bm) / S.base.fatt * 1000) / 10 : 0;
     if (r.metodo === 'auto') delete D.budget.righe[d.bm]; else D.budget.righe[d.bm] = r;
-    salva(); return render(); }
-  if (d.bv) { const r = D.budget.righe[d.bv] || { metodo: 'importo' }; r.valore = num(t.value); D.budget.righe[d.bv] = r; salva(); return render(); }
-  if (d.bp) { D.budget[d.bp] = d.bp === 'anno' ? +t.value || null : num(t.value); salva(); return render(); }
+    salva(); return setTimeout(render); }
+  if (d.bv) { const r = D.budget.righe[d.bv] || { metodo: 'importo' }; r.valore = num(t.value); D.budget.righe[d.bv] = r; salva(); return setTimeout(render); }
+  if (d.bp) { D.budget[d.bp] = d.bp === 'anno' ? +t.value || null : num(t.value); salva(); return setTimeout(render); }
 });
 let cercaT;
 document.addEventListener('input', e => {
