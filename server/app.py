@@ -780,6 +780,11 @@ def admin_sso_users():
     if code != 200:
         return jsonify({"enabled": True, "error": "Accesso unico non raggiungibile, riprova tra poco.", "users": []})
     users = data.get("users", [])
+    # anche chi ha solo l'App di bilancio: le aziende assegnate qui valgono per entrambe
+    code2, data2 = sso_call("/api/sso/users", {"app": "bilancio"})
+    if code2 == 200:
+        visti = {u["id"] for u in users}
+        users += [u for u in data2.get("users", []) if u["id"] not in visti]
     links = {}
     for r in get_db().execute("SELECT sso_user_id, company_id FROM sso_company_links").fetchall():
         links.setdefault(r["sso_user_id"], []).append(r["company_id"])
@@ -1462,6 +1467,14 @@ def _trasloco_import():
 _trasloco_import()
 
 init_db()
+
+# App di bilancio (Controllo di gestione): pagina /bilancio e API /api/bilancio/... nello stesso servizio
+import bilancio_api
+bilancio_api.registra(app, {
+    "get_db": get_db, "json_error": json_error, "sso_call": sso_call, "sso_enabled": sso_enabled, "SSO_URL": SSO_URL,
+    "sso_company_ids": sso_company_ids, "now_iso": now_iso, "STATIC_DIR": STATIC_DIR,
+    "connect": lambda: (os.makedirs(DATA_DIR, exist_ok=True), sqlite3.connect(DB_PATH))[1],
+})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
