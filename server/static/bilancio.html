@@ -128,6 +128,15 @@ table.dt input:focus,table.dt select:focus{outline:2px solid var(--teal);border-
 .step p{margin:0;font-size:12.8px;color:var(--text-soft)}
 @media (max-width:900px){.steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .rt-hero{margin-bottom:18px}
+.dscr-box{--rc:#9aa3a6;flex:0 1 300px;min-width:240px;border-left:1px solid var(--border);padding-left:22px}
+.dscr-v{font-family:var(--font-brand);font-size:44px;font-weight:800;line-height:1.05;color:var(--rc);margin:4px 0 2px}
+.dscr-box .s{font-size:12.8px;color:var(--text-soft)}
+.dscr-bar{position:relative;height:10px;border-radius:99px;margin:12px 0 18px;background:linear-gradient(90deg,#c0483f 0 40%,#c79a16 40% 48%,#5fa35a 48% 60%,#1f6b3f 60% 100%)}
+.dscr-bar i{position:absolute;top:-5px;width:4px;height:20px;border-radius:3px;background:var(--navy);transform:translateX(-50%);box-shadow:0 0 0 2px #fff}
+.dscr-bar span{position:absolute;top:13px;font-size:10.5px;font-weight:800;color:var(--text-soft);transform:translateX(-50%)}
+.leg-h{font-family:var(--font-brand);font-size:15px;color:var(--navy);margin:0 0 6px}
+.leg-t{width:100%;border-collapse:collapse;font-size:13px}.leg-t td{padding:6px 6px;border-bottom:1px solid var(--border);vertical-align:top}.leg-t td:first-child{width:1%;white-space:nowrap}
+@media (max-width:700px){.dscr-box{border-left:0;padding-left:0;border-top:1px solid var(--border);padding-top:14px;flex-basis:100%}}
 .rt-badge{--rc:var(--teal);width:150px;height:150px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;flex:none;
   background:radial-gradient(circle at 50% 40%,color-mix(in srgb,var(--rc) 16%,#fff),#fff 72%);border:6px solid var(--rc);box-shadow:0 10px 28px color-mix(in srgb,var(--rc) 30%,transparent)}
 .rt-badge b{font-family:var(--font-brand);font-size:44px;line-height:1;color:var(--rc);letter-spacing:-.02em}
@@ -599,7 +608,7 @@ function pCruscotto(S) {
   ${kpi(k, cfr[0], cfr[1])}
   ${(() => { const B = bilanciSP(); if (!B.length) return ''; const b = B[0];
     return `<div class="card" style="margin-top:18px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">${badge(b.r)}<div style="flex:1;min-width:220px"><div class="muted" style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em">Rating creditizio · ${esc(b.titolo)}</div>
-      <div style="font-family:var(--font-brand);font-weight:700;color:var(--navy);font-size:17px;margin:2px 0 8px">${b.r.liv[0]} · ${b.r.liv[1].toLowerCase()} (${b.r.tot}/12)</div>${scala(b.r)}</div><button class="btn small" data-pag="rating">Apri il rating</button></div>`; })()}
+      <div style="font-family:var(--font-brand);font-weight:700;color:var(--navy);font-size:17px;margin:2px 0 8px">${b.r.liv[0]} · ${b.r.liv[1].toLowerCase()} (${b.r.tot}/12)</div>${scala(b.r)}</div>${b.r.dscr != null ? `<div style="text-align:center;min-width:110px"><div class="muted" style="font-size:11px;font-weight:800;text-transform:uppercase">DSCR</div><div style="font-family:var(--font-brand);font-size:28px;font-weight:800;color:${fasciaDscr(b.r.dscr).c}">${nf2.format(b.r.dscr)}</div><div style="font-size:12px;font-weight:700;color:${fasciaDscr(b.r.dscr).c}">${fasciaDscr(b.r.dscr).l}</div></div>` : ''}<button class="btn small" data-pag="rating">Apri il rating</button></div>`; })()}
   <div class="charts" style="margin-top:18px">
     <div class="card" style="margin:0"><h2>Punto di pareggio</h2><div class="chartbox"><canvas id="chBep"></canvas></div></div>
     <div class="card" style="margin:0"><h2>Dal fatturato all'utile</h2><div class="chartbox"><canvas id="chCascata"></canvas></div></div>
@@ -771,7 +780,8 @@ function pRating(S) {
     <div class="card" style="margin:0;display:flex;gap:22px;align-items:center;flex-wrap:wrap">${badge(top.r, true)}
       <div style="flex:1;min-width:240px"><div class="muted" style="font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.04em">${esc(top.titolo)}</div>
         <div style="font-family:var(--font-brand);font-size:20px;font-weight:700;color:var(--navy);margin:2px 0 10px">Livello ${top.r.liv[0]} · ${top.r.liv[1].toLowerCase()}</div>${scala(top.r)}
-        ${B.length > 1 ? `<div class="row" style="margin-top:12px">${B.slice(1).map(b => `<span class="rt-mini" style="--rc:${b.r.liv[2]}">${esc(b.titolo)}: <b>${b.r.liv[0]}</b></span>`).join('')}</div>` : ''}</div></div>
+        ${B.length > 1 ? `<div class="row" style="margin-top:12px">${B.slice(1).map(b => `<span class="rt-mini" style="--rc:${b.r.liv[2]}">${esc(b.titolo)}: <b>${b.r.liv[0]}</b></span>`).join('')}</div>` : ''}</div>
+      ${dscrBox(top)}</div>
   </div>
   <div class="card"><h2>Principali indicatori</h2>
   <div class="table-scroll" style="max-height:none"><table class="dt"><thead><tr><th>Indicatore <span style="text-transform:none;font-weight:600">(valore ottimale)</span></th>${col(b => `<th>${esc(b.titolo)}</th><th class="c">Punti</th>`)}</tr></thead><tbody>
@@ -809,8 +819,35 @@ function pRating(S) {
       ${riga('Rate dei finanziamenti nell\'anno', b => `<td><input inputmode="decimal" data-rt="${esc(b.id)}" data-campo="rate" value="${b.r.rate ? esc(nf0.format(Math.round(b.r.rate))) : ''}" placeholder="da inserire" ${ro}></td>`)}
       ${riga('DSCR', b => `<td><b class="${b.r.dscr == null ? 'muted' : b.r.dscr > 1.05 ? 'pos' : b.r.dscr < 0.95 ? 'neg' : ''}" style="font-size:16px">${b.r.dscr == null ? '—' : nf2.format(b.r.dscr)}</b></td>`, 'tot')}
     </tbody></table></div>
-    <div class="ricl-legend" style="margin-top:12px"><span><b class="pos">maggiore di 1</b>: l'impresa riesce a far fronte agli impegni con i finanziatori</span><span><b>uguale a 1</b>: non resta denaro per investimenti o dividendi</span><span><b class="neg">minore di 1</b>: tensione finanziaria, possibili difficoltà a rimborsare</span></div></div>
-  <div class="card"><h2>Scala dei livelli</h2><div class="rt-leg">${LIVELLI.map(l => `<span><span class="rt-chip" style="--rc:${l[2]}">${l[0]}</span>${l[1]}</span>`).join('')}</div></div>`;
+    <p class="muted" style="font-size:12.5px;margin:10px 0 0">Come leggerlo: vedi «Come leggere i risultati» qui sotto.</p></div>
+  <div class="card"><h2>Come leggere i risultati</h2><div class="charts">
+    <div><h3 class="leg-h">Rating</h3>
+      <p class="muted" style="font-size:13px;margin:0 0 10px">È il giudizio sintetico sull'affidabilità dell'azienda, come lo guarda una banca. Ognuno dei 4 indicatori vale da 1 a 3 punti (<span class="rt-dots">${'<i class="g"></i>'.repeat(3)}</span> ottimo, <span class="rt-dots"><i class="y"></i><i class="y"></i><i></i></span> accettabile, <span class="rt-dots"><i class="r"></i><i></i><i></i></span> critico): la somma dà il livello.</p>
+      <table class="leg-t">${LIVELLI.map((l, i) => `<tr><td><span class="rt-chip" style="--rc:${l[2]}">${l[0]}</span></td><td class="c muted">${i < 6 ? 12 - i : '6 o meno'}</td><td><b>${l[1]}</b> · ${['solidità eccellente: credito alle condizioni migliori', 'azienda solida, pochi punti da migliorare', 'buona affidabilità, qualche indicatore da tenere d\'occhio', 'affidabilità sufficiente: le banche chiedono più garanzie', 'segnali di debolezza: credito più caro e più difficile', 'situazione fragile: serve intervenire sugli indicatori critici', 'rischio di insolvenza: credito molto difficile da ottenere'][i]}</td></tr>`).join('')}</table>
+      <p class="muted" style="font-size:12.5px;margin:10px 0 0">Per salire di livello, lavora sugli indicatori con meno punti: per esempio ridurre gli oneri finanziari (rinegoziare i finanziamenti) o rafforzare i mezzi propri (lasciare gli utili in azienda).</p></div>
+    <div><h3 class="leg-h">DSCR</h3>
+      <p class="muted" style="font-size:13px;margin:0 0 10px">Debt Service Coverage Ratio: quante volte la cassa prodotta nell'anno (EBITDA meno imposte pagate) copre le rate dei finanziamenti (capitale + interessi). Esempio: 1,5 vuol dire che per ogni 100 € di rate l'azienda genera 150 € di cassa.</p>
+      <table class="leg-t">${DSCR_FASCE.map((f, i) => `<tr><td><span class="rt-chip" style="--rc:${f.c}">${['≥ 1,5', '1,2 – 1,5', '1 – 1,2', '< 1'][i]}</span></td><td><b>${f.l}</b> · ${f.t}</td></tr>`).join('')}</table>
+      <p class="muted" style="font-size:12.5px;margin:10px 0 0">Sotto 1 l'azienda deve usare la liquidità accumulata o nuovo debito per pagare le rate.</p></div>
+  </div></div>`;
+}
+// DSCR: quante volte la cassa operativa dell'anno copre le rate dei finanziamenti
+const DSCR_FASCE = [
+  { min: 1.5, l: 'Solido', c: '#1f6b3f', t: 'Ampio margine: le rate sono coperte con largo anticipo e resta cassa per investimenti e imprevisti.' },
+  { min: 1.2, l: 'Buono', c: '#5fa35a', t: 'Le rate sono coperte con un margine adeguato: è la soglia che le banche di solito chiedono per concedere credito.' },
+  { min: 1.0, l: 'Al limite', c: '#c79a16', t: 'Le rate sono coperte ma resta poco: quasi niente per investimenti o dividendi, ogni imprevisto pesa.' },
+  { min: -Infinity, l: 'In tensione', c: '#c0483f', t: 'La cassa dell\'anno non basta a pagare le rate: possibili difficoltà nel rimborso del debito.' },
+];
+const fasciaDscr = x => DSCR_FASCE.find(f => x >= f.min);
+function dscrBox(b) {
+  const x = b.r.dscr, f = x == null ? null : fasciaDscr(x);
+  const pos = x == null ? 0 : Math.max(0, Math.min(100, x / 2.5 * 100));
+  return `<div class="dscr-box" style="--rc:${f ? f.c : '#9aa3a6'}">
+    <div class="muted" style="font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.04em">DSCR · sostenibilità del debito</div>
+    ${x == null ? `<div class="dscr-v muted">—</div><div class="s">Scrivi le <b>rate dei finanziamenti</b> dell'anno qui sotto e lo calcolo.</div>`
+      : `<div class="dscr-v">${nf2.format(x)}</div><div class="s"><b style="color:var(--rc)">${f.l}</b> · la cassa dell'anno copre ${nf1.format(x)} volte le rate</div>
+         <div class="dscr-bar" aria-hidden="true"><i style="left:${pos}%"></i><span style="left:40%">1</span><span style="left:48%">1,2</span><span style="left:60%">1,5</span></div>`}
+  </div>`;
 }
 const punti = n => `<span class="rt-dots" title="${n} su 3">${[1, 2, 3].map(i => `<i class="${i <= n ? (n === 3 ? 'g' : n === 2 ? 'y' : 'r') : ''}"></i>`).join('')}</span>`;
 
