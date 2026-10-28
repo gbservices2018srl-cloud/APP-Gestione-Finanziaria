@@ -82,7 +82,7 @@ p.pagesub{margin:0 0 20px;color:var(--text-soft);font-size:13.5px;max-width:90ch
 .scen .when{font-size:12.5px;color:var(--text-soft);background:#fff;border:1px solid var(--border);border-radius:999px;padding:5px 12px}
 .charts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
 .chartbox{position:relative;height:320px}
-@media (max-width:1150px){.cru-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.charts{grid-template-columns:1fr}}
+@media (max-width:1150px){.cru-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.charts{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:520px){.cru-grid{grid-template-columns:1fr}.cru.big{grid-column:auto}}
 /* tabelle */
 .table-scroll{overflow:auto;max-width:100%;max-height:72vh;border:1px solid var(--border);border-radius:12px}
@@ -127,6 +127,21 @@ table.dt input:focus,table.dt select:focus{outline:2px solid var(--teal);border-
 .step b{font-family:var(--font-brand);color:var(--navy)}
 .step p{margin:0;font-size:12.8px;color:var(--text-soft)}
 @media (max-width:900px){.steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.rt-hero{margin-bottom:18px}
+.rt-badge{--rc:var(--teal);width:150px;height:150px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;flex:none;
+  background:radial-gradient(circle at 50% 40%,color-mix(in srgb,var(--rc) 16%,#fff),#fff 72%);border:6px solid var(--rc);box-shadow:0 10px 28px color-mix(in srgb,var(--rc) 30%,transparent)}
+.rt-badge b{font-family:var(--font-brand);font-size:44px;line-height:1;color:var(--rc);letter-spacing:-.02em}
+.rt-badge span{font-size:11.5px;font-weight:800;color:var(--navy);margin-top:4px;max-width:110px}
+.rt-badge small{font-size:11px;color:var(--text-soft);margin-top:2px}
+.rt-badge:not(.big){width:96px;height:96px;border-width:4px}.rt-badge:not(.big) b{font-size:28px}.rt-badge:not(.big) span{font-size:10px}.rt-badge:not(.big) small{display:none}
+.rt-scala{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;max-width:520px}
+.rt-scala span{text-align:center;font-weight:800;font-size:12px;padding:7px 0;border-radius:7px;background:color-mix(in srgb,var(--rc) 14%,#fff);color:color-mix(in srgb,var(--rc) 85%,#000)}
+.rt-scala span.on{background:var(--rc);color:#fff;transform:scale(1.12);box-shadow:0 4px 12px color-mix(in srgb,var(--rc) 45%,transparent)}
+.rt-mini{font-size:12.5px;border:1px solid var(--border);border-radius:999px;padding:4px 11px;background:#fff}.rt-mini b{color:var(--rc)}
+.rt-chip{display:inline-block;min-width:44px;text-align:center;font-weight:800;font-size:12px;color:#fff;background:var(--rc);border-radius:7px;padding:2px 8px;margin-right:6px}
+.rt-dots{display:inline-flex;gap:3px}.rt-dots i{width:11px;height:11px;border-radius:50%;background:#e6e1e7;display:inline-block}
+.rt-dots i.g{background:var(--green)}.rt-dots i.y{background:var(--amber)}.rt-dots i.r{background:var(--red)}
+.rt-leg{display:flex;flex-wrap:wrap;gap:10px 18px;font-size:13px}
 .formula{font-family:var(--mono);font-size:12.5px;background:#faf8fb;border:1px solid var(--border);border-radius:9px;padding:10px 12px;line-height:1.7;overflow-x:auto}
 .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:11px 18px;border-radius:12px;font-weight:700;font-size:13.5px;z-index:99;box-shadow:0 10px 30px rgba(0,0,0,.2);max-width:92vw}
 .gate{max-width:520px;margin:12vh auto;background:#fff;border:1px solid var(--border);border-radius:18px;padding:28px;text-align:center}
@@ -170,6 +185,7 @@ const IC = {
   consuntivo: '<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 13l2 2 4-4"/>',
   scostamenti: '<path d="M4 19V5M4 19h16"/><path d="M8 15l3-4 3 2 5-6"/><path d="M15 7h4v4"/>',
   impostazioni: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 9 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H3a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 4.6 9a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/>',
+  rating: '<path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.4 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z"/>',
   up: '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/>', print: '<path d="M6 9V3h12v6M6 18H4v-7h16v7h-2"/><rect x="6" y="14" width="12" height="7"/>',
   plus: '<path d="M12 5v14M5 12h14"/>', trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
 };
@@ -224,9 +240,90 @@ function proponi(v) {
   return { area, natura };
 }
 
+/* ---------- stato patrimoniale riclassificato (per il rating) ---------- */
+const AREE_SP = [
+  { k: 'immImm', l: 'Immobilizzazioni immateriali', lato: 'attivo' },
+  { k: 'immMat', l: 'Immobilizzazioni materiali', lato: 'attivo' },
+  { k: 'immFin', l: 'Immobilizzazioni finanziarie', lato: 'attivo' },
+  { k: 'rimanenze', l: 'Rimanenze', lato: 'attivo' },
+  { k: 'crediti', l: 'Crediti entro 12 mesi', lato: 'attivo' },
+  { k: 'creditiOltre', l: 'Crediti oltre 12 mesi', lato: 'attivo' },
+  { k: 'liquidita', l: 'Liquidità (banche e cassa)', lato: 'attivo' },
+  { k: 'ratei', l: 'Ratei e risconti attivi', lato: 'attivo' },
+  { k: 'fondoImm', l: 'Fondo amm. immateriali (riduce le immobilizzazioni)', lato: 'passivo' },
+  { k: 'fondoMat', l: 'Fondo amm. materiali (riduce le immobilizzazioni)', lato: 'passivo' },
+  { k: 'pn', l: 'Patrimonio netto', lato: 'passivo' },
+  { k: 'consolidate', l: 'TFR, TFM e fondi', lato: 'passivo' },
+  { k: 'mutui', l: 'Mutui e finanziamenti oltre 12 mesi', lato: 'passivo' },
+  { k: 'banche', l: 'Banche entro 12 mesi', lato: 'passivo' },
+  { k: 'correnti', l: 'Debiti a breve (fornitori, erario, personale, ratei…)', lato: 'passivo' },
+];
+const AREA_SP = Object.fromEntries(AREE_SP.map(a => [a.k, a]));
+function proponiSP(v) {
+  const d = (v.descr || '').toUpperCase(), m = (v.codice || '').slice(0, 2);
+  if (v.lato === 'attivo') {
+    if (m === '03' || m === '04') return 'immImm';
+    if (m === '06' || m === '07') return 'immMat';
+    if (m === '09' || m === '20' || /DEPOSIT|CAUZION|PARTECIPAZ|POLIZZ/.test(d)) return 'immFin';
+    if (m === '11' || /RIMANENZ|MERCI$/.test(d)) return 'rimanenze';
+    if (m === '24' || /CASSA|BANCA|BANCO|C\/C|POSTA/.test(d)) return 'liquidita';
+    if (m === '26' || /RATEI|RISCONTI/.test(d)) return 'ratei';
+    return 'crediti';
+  }
+  if (m === '31' || /\bT\.?F\.?[RM]\b|TRATTAMENTO FINE/.test(d)) return 'consolidate';
+  if (m === '04') return 'fondoImm';
+  if (m === '07') return 'fondoMat';
+  if (/(F\.?DO|FONDO|F\/)\s*AMM/.test(d)) return /AVVIAM|PLURIENN|IMMATER|RISTR|MANUT|SOFTWARE|BREVETT/.test(d) ? 'fondoImm' : 'fondoMat';
+  if (m === '28' || /CAPITALE SOCIALE|RISERV|UTILI.*PORTAT/.test(d)) return 'pn';
+  if (/FONDO|F\.DO/.test(d)) return 'consolidate';
+  if (m === '34' || /MUTU|FINANZ/.test(d)) return /C\/C|CONTO CORR|CARTA|ANTICIP|SCOPERT/.test(d) ? 'banche' : 'mutui';
+  return 'correnti';
+}
+function calcolaSP(sp, k) {
+  const A = Object.fromEntries(AREE_SP.map(a => [a.k, 0]));
+  for (const v of Object.values(D.vociSP || {})) { const x = sp?.[v.id] || 0; if (x) A[v.area] = (A[v.area] || 0) + x; }
+  const immob = A.immImm - A.fondoImm + A.immMat - A.fondoMat + A.immFin;
+  const altroAC = A.crediti + A.liquidita + A.ratei;
+  const totAtt = immob + A.rimanenze + altroAC + A.creditiOltre;
+  const pasCirc = A.banche + A.correnti, pasML = A.consolidate + A.mutui, mezzi = A.pn + (k?.utile || 0), totPas = pasCirc + pasML + mezzi;
+  return { A, immob, altroAC, rim: A.rimanenze, totAtt, pasCirc, pasML, mezzi, totPas, quadra: Math.abs(totAtt - totPas) < 5 };
+}
+const LIVELLI = [['AAA', 'Rischio molto basso', '#1f6b3f'], ['AA', 'Rischio basso', '#2f8a52'], ['A', 'Rischio medio basso', '#5fa35a'], ['BBB', 'Rischio medio', '#c79a16'], ['BB', 'Rischio medio alto', '#d9822b'], ['B', 'Rischio alto', '#c0483f'], ['CCC', 'Default', '#7d2620']];
+// indicatori creditizi: 3 = ottimo, 2 = accettabile, 1 = critico; la somma dà il livello (12 = AAA … 6 o meno = CCC)
+function rating(b) {
+  const k = b.k, s = b.s, f = b.f || 1;
+  const ann = x => x / f;
+  const onFin = k.A.finanziari - k.A.provFin, cf = ann(k.utile + k.A.ammortamenti);
+  const ind = [
+    { k: 'circ', l: 'Attivo circolante / Passivo circolante', ott: '≥ 1,20', v: s.pasCirc ? (s.altroAC + s.rim) / s.pasCirc : 0, fmt: x => nf2.format(x), n: x => x <= 0 ? 0 : x >= 1.2 ? 3 : x <= 1 ? 1 : 2,
+      spieg: 'I crediti e la liquidità a breve devono superare del 20% i debiti entro 12 mesi.' },
+    { k: 'mezzi', l: 'Mezzi propri / Totale passivo', ott: '≥ 5%', v: s.totPas ? s.mezzi / s.totPas : 0, fmt: pct, n: x => x <= 0 ? 0 : x >= 0.05 ? 3 : x <= 0.03 ? 1 : 2,
+      spieg: 'Il capitale proprio dovrebbe crescere insieme all\'azienda.' },
+    { k: 'onfin', l: 'Oneri finanziari / Fatturato', ott: '≤ 5%', v: k.fatt ? onFin / k.fatt : 0, fmt: pct, n: x => x <= 0.05 ? 3 : x >= 0.10 ? 1 : 2,
+      spieg: 'Interessi e oneri sui finanziamenti (al netto dei proventi) non oltre il 5% del fatturato.' },
+    { k: 'cf', l: 'Cash flow / Totale attivo', ott: '≥ 4%', v: s.totAtt ? cf / s.totAtt : 0, fmt: pct, n: x => x <= 0 ? 0 : x >= 0.04 ? 3 : x <= 0.03 ? 1 : 2,
+      spieg: 'Capacità di produrre cassa: utile + ammortamenti' + (f < 0.999 ? ' (riportati a un anno intero)' : '') + ' rispetto all\'attivo.' },
+  ];
+  ind.forEach(i => i.punti = i.n(i.v));
+  const tot = ind.reduce((t, i) => t + i.punti, 0);
+  const liv = LIVELLI[Math.min(6, Math.max(0, 12 - tot))];
+  const r = (D.rating || {})[b.id] || {};
+  const imposte = r.imposte != null ? +r.imposte : ann(k.A.imposte), rate = +r.rate || 0;
+  const dscr = rate > 0 ? (ann(k.ebitda) - imposte) / rate : null;
+  return { ind, tot, liv, onFin, cf, dscr, imposte, rate, imposteManuale: r.imposte != null };
+}
+// bilanci con lo stato patrimoniale (riferimento e consuntivi), dal più recente
+function bilanciSP() {
+  const out = [];
+  if (D.base?.sp) out.push({ id: 'base', titolo: `Bilancio ${D.base.anno}`, al: D.base.al, dal: D.base.dal, anno: +D.base.anno, valori: D.base.valori, sp: D.base.sp });
+  for (const c of D.consuntivi) if (c.sp) out.push({ id: c.id, titolo: `Al ${dIt(c.al)}`, al: c.al, dal: c.dal, anno: +c.anno, valori: c.valori, sp: c.sp });
+  out.sort((a, b) => b.al.localeCompare(a.al));
+  return out.slice(0, 4).map(b => { b.f = frazione(b.dal, b.al); b.k = calcola(b.valori, { anno: b.anno, dal: b.dal, al: b.al, f: b.f }); b.s = calcolaSP(b.sp, b.k); b.r = rating(b); return b; });
+}
+
 /* ---------- stato ---------- */
 let D = null, VER = 0, ME = {}, PAGE = 'cruscotto', SCEN = 'consuntivo', FILT = { r: 'tutte', q: '' }, CHARTS = [], PDF_PER = null, APERTA = null;
-const vuoti = () => ({ voci: {}, base: null, budget: { anno: null, crescita: 0, inflazione: 0, righe: {} }, consuntivi: [], scelto: null, proiezione: 'misto' });
+const vuoti = () => ({ voci: {}, vociSP: {}, rating: {}, base: null, budget: { anno: null, crescita: 0, inflazione: 0, righe: {} }, consuntivi: [], scelto: null, proiezione: 'misto' });
 
 async function api(method, url, body, retry = true) {
   const opt = { method, credentials: 'same-origin', headers: {} };
@@ -269,10 +366,15 @@ function salva(subito = false) {
 /* ---------- numeri ---------- */
 const nf0 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
 const nf1 = new Intl.NumberFormat('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const nf2 = new Intl.NumberFormat('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const eur = v => (v < 0 ? '−' : '') + nf0.format(Math.abs(Math.round(v || 0))) + ' €';
 const eurS = v => { const a = Math.abs(v || 0); return (v < 0 ? '−' : '') + (a >= 1e6 ? nf1.format(a / 1e6).replace(/,0$/, '') + ' mln €' : a >= 1e4 ? nf0.format(a / 1e3) + 'k €' : nf0.format(a) + ' €'); };
 const pct = v => isFinite(v) ? nf1.format(v * 100) + '%' : '—';
-const num = s => { const t = String(s ?? '').trim().replace(/\s|€|%/g, ''); if (!t) return 0; const n = Number(t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t); return isFinite(n) ? n : 0; };
+// numeri scritti all'italiana: 200.000 = duecentomila, 1.234,56 = mille e due…, 2,5 = due e mezzo
+const num = s => { let t = String(s ?? '').trim().replace(/\s|€|%/g, ''); if (!t) return 0;
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  else if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+  const n = Number(t); return isFinite(n) ? n : 0; };
 const MESI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
 const dIt = iso => { if (!iso) return ''; const [y, m, d] = iso.slice(0, 10).split('-'); return `${+d} ${MESI[+m - 1]} ${y}`; };
 const giorniAnno = y => ((y % 4 === 0 && y % 100 !== 0) || y % 400 === 0) ? 366 : 365;
@@ -395,7 +497,7 @@ async function cancello() {
 }
 
 /* ---------- impaginazione ---------- */
-const PAGINE = [['cruscotto', 'Cruscotto KPI'], ['budget', 'Budget'], ['consuntivo', 'Consuntivo'], ['scostamenti', 'Scostamenti'], ['impostazioni', 'Impostazioni']];
+const PAGINE = [['cruscotto', 'Cruscotto KPI'], ['budget', 'Budget'], ['consuntivo', 'Consuntivo'], ['scostamenti', 'Scostamenti'], ['rating', 'Rating'], ['impostazioni', 'Impostazioni']];
 // Dopo una modifica la pagina resta dov'era: posizione della pagina, scorrimento delle tabelle e campo attivo
 let SNAP = null;
 const istantanea = () => ({ t: Date.now(), y: window.scrollY, x: window.scrollX, pag: PAGE, tab: [...document.querySelectorAll('#main .table-scroll')].map(t => [t.scrollTop, t.scrollLeft]) });
@@ -420,7 +522,7 @@ function disegna() {
   $('#nav').innerHTML = PAGINE.map(([k, l]) => `<button class="navbtn ${PAGE === k ? 'active' : ''}" data-pag="${k}">${ic(k)}${l}${k === 'consuntivo' && nuove ? `<span class="nb" title="Voci nuove">${nuove}</span>` : k === 'impostazioni' && daCl ? `<span class="nb" title="Da classificare">${daCl}</span>` : ''}</button>`).join('');
   $('#foot').innerHTML = `${esc(ME.utente || '')}<br>${ME.admin ? 'Amministratore' : 'Consultazione'} · <span class="saving" id="saving">${ME.agg ? 'Aggiornato ' + dIt(ME.agg) : ''}</span><br><a href="${esc(ME.home || 'https://appgestione.it')}">← Le mie app</a> · <a href="/">Gestione finanziaria</a>`;
   const S = scenari();
-  $('#main').innerHTML = ({ cruscotto: pCruscotto, budget: pBudget, consuntivo: pConsuntivo, scostamenti: pScostamenti, impostazioni: pImpostazioni }[PAGE] || pCruscotto)(S);
+  $('#main').innerHTML = ({ cruscotto: pCruscotto, budget: pBudget, consuntivo: pConsuntivo, scostamenti: pScostamenti, rating: pRating, impostazioni: pImpostazioni }[PAGE] || pCruscotto)(S);
   disegnaGrafici(S);
   const u = new URL(location.href); u.searchParams.set('p', PAGE); history.replaceState(null, '', u);
 }
@@ -495,6 +597,9 @@ function pCruscotto(S) {
     <span class="row"><span class="when">${SCEN === 'consuntivo' && S.c ? `Periodo ${dIt(S.c.dal)} → ${dIt(S.c.al)} · ${pct(S.f)} dell'anno` : SCEN === 'proiezione' ? `Stima al 31 dic ${S.c?.anno} · metodo «${({ misto: 'misto', andamento: 'andamento attuale', budget: 'budget restante' })[D.proiezione || 'misto']}»` : `Anno ${S.anno}`}</span>
     <button class="btn small noprint" data-print>${ic('print')}Stampa</button></span></div>
   ${kpi(k, cfr[0], cfr[1])}
+  ${(() => { const B = bilanciSP(); if (!B.length) return ''; const b = B[0];
+    return `<div class="card" style="margin-top:18px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">${badge(b.r)}<div style="flex:1;min-width:220px"><div class="muted" style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em">Rating creditizio · ${esc(b.titolo)}</div>
+      <div style="font-family:var(--font-brand);font-weight:700;color:var(--navy);font-size:17px;margin:2px 0 8px">${b.r.liv[0]} · ${b.r.liv[1].toLowerCase()} (${b.r.tot}/12)</div>${scala(b.r)}</div><button class="btn small" data-pag="rating">Apri il rating</button></div>`; })()}
   <div class="charts" style="margin-top:18px">
     <div class="card" style="margin:0"><h2>Punto di pareggio</h2><div class="chartbox"><canvas id="chBep"></canvas></div></div>
     <div class="card" style="margin:0"><h2>Dal fatturato all'utile</h2><div class="chartbox"><canvas id="chCascata"></canvas></div></div>
@@ -616,6 +721,7 @@ function pImpostazioni(S) {
   return `<h1 class="pagetitle">Impostazioni</h1><p class="pagesub">Il bilancio di riferimento da cui leggo le voci, e la riclassificazione di ogni voce: <b>area</b> del conto economico riclassificato e <b>natura</b> (costo fisso o variabile). Le stesse voci si usano in budget, consuntivo e scostamenti.</p>
   <div class="card"><h2>Bilancio di riferimento</h2>
     ${b ? `<div class="msg ${b.controllo?.ok === false ? 'warn' : 'ok'}"><span>✓</span><span><b>${esc(b.ditta || 'Bilancio')}</b> · anno ${b.anno} (${dIt(b.dal)} → ${dIt(b.al)}) · ${Object.keys(b.valori).length} voci · ${esc(b.file || '')} · caricato il ${dIt(b.caricatoIl)}${b.controllo ? ` · ricavi ${eur(b.controllo.ricavi)}, costi ${eur(b.controllo.costi)}, utile <b>${eur(b.controllo.utile)}</b> ${b.controllo.ok ? '(quadra con il bilancio)' : '(⚠ non quadra con i totali del PDF)'}` : ''}</span></div>` : '<p class="muted" style="margin:0 0 12px">Carica il bilancio a 4 sezioni dell\'ultimo anno chiuso: è la base del budget.</p>'}
+    ${b && !b.sp ? '<div class="msg warn"><span>⚠</span><span>Ricarica lo stesso PDF per leggere anche lo <b>stato patrimoniale</b> (serve al Rating): le classificazioni restano.</span></div>' : ''}
     ${caricaBox('base')}</div>
   ${b ? `<div class="card"><h2>Riclassificazione delle voci <span class="sp"></span>${ME.admin && daCl.length ? `<button class="btn small" data-proponi>Applica le proposte alle ${daCl.length} da classificare</button>` : ''}</h2>
     <div class="ricl-legend"><span><span class="tag f">Fisso</span> non cambia con il fatturato (affitti, stipendi, leasing…)</span><span><span class="tag v">Variabile</span> cresce con il fatturato (materiali, compensi a percentuale…)</span><span><span class="tag x">fuori calcolo</span> extra gestione e imposte</span></div>
@@ -625,6 +731,12 @@ function pImpostazioni(S) {
     ${lista.map(v => `<tr class="${v.nuova ? 'nuova' : ''}"><td><span class="vd" title="${esc(v.mastro || '')}">${v.nuova ? '<span class="tag new">NUOVA</span> ' : ''}${esc(v.descr)}</span><span class="cod">${esc(v.codice)} · ${esc(v.mastro || '')}</span></td>
       <td>${eur(base(v.id))}</td><td class="muted">${S.base.fatt ? pct(base(v.id) / S.base.fatt) : ''}</td><td class="l">${selArea(v)}</td><td class="c">${fvSel(v)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Nessuna voce</td></tr>'}
     </tbody></table></div></div>
+  ${Object.keys(D.vociSP || {}).length ? `<div class="card"><h2>Stato patrimoniale · riclassificazione per il rating</h2>
+    <p class="muted" style="font-size:13px;margin:-4px 0 10px">Le voci dell'attivo e del passivo con il gruppo in cui le conto. I fondi di ammortamento riducono le immobilizzazioni.</p>
+    <div class="table-scroll"><table class="dt"><thead><tr><th>Voce</th><th>${D.base?.anno || ''}</th><th class="l">Gruppo</th></tr></thead><tbody>
+    ${['attivo', 'passivo'].map(lato => `<tr class="area"><td colspan="3">${lato === 'attivo' ? 'Attivo' : 'Passivo'}</td></tr>` + Object.values(D.vociSP).filter(v => v.lato === lato).sort((a, b) => a.codice.localeCompare(b.codice)).map(v => `<tr><td><span class="vd">${esc(v.descr)}</span><span class="cod">${esc(v.codice)} · ${esc(v.mastro || '')}</span></td><td>${eur(D.base?.sp?.[v.id] || 0)}</td>
+      <td class="l"><select data-area-sp="${esc(v.id)}" ${ME.admin ? '' : 'disabled'}>${AREE_SP.filter(a => a.lato === v.lato).map(a => `<option value="${a.k}" ${v.area === a.k ? 'selected' : ''}>${a.l}</option>`).join('')}</select></td></tr>`).join('')).join('')}
+    </tbody></table></div></div>` : ''}
   <div class="card"><h2>Come calcolo gli indicatori</h2><div class="formula">
     Costo materie = rimanenze iniziali + acquisti − rimanenze finali<br>
     EBITDA (MOL) = fatturato − (materie + produttivi + personale + commerciali + amministrativi + oneri tributari)<br>
@@ -632,8 +744,75 @@ function pImpostazioni(S) {
     Utile = risultato della gestione + altri ricavi − costi extra − imposte<br>
     Costi fissi / variabili = somma delle voci classificate (extra gestione e imposte escluse)<br>
     Margine di contribuzione % = 1 − costi variabili / fatturato<br>
-    Break even point = costi fissi / margine di contribuzione % · Data di pareggio = 1 gennaio + (BEP / fatturato) × giorni dell'anno</div></div>` : ''}`;
+    Break even point = costi fissi / margine di contribuzione % · Data di pareggio = 1 gennaio + (BEP / fatturato) × giorni dell'anno<br>
+    Rating: attivo circolante / passivo circolante (≥ 1,20) · mezzi propri / totale passivo (≥ 5%) · oneri finanziari / fatturato (≤ 5%) · cash flow / totale attivo (≥ 4%): da 1 a 3 punti ciascuno, 12 = AAA … 6 = CCC</div></div>` : ''}`;
 }
+
+/* ---------- rating creditizio ---------- */
+function badge(r, grande) {
+  return `<div class="rt-badge ${grande ? 'big' : ''}" style="--rc:${r.liv[2]}"><b>${r.liv[0]}</b><span>${r.liv[1]}</span><small>${r.tot} punti su 12</small></div>`;
+}
+function scala(r) {
+  return `<div class="rt-scala" aria-hidden="true">${LIVELLI.map(l => `<span style="--rc:${l[2]}" class="${l[0] === r.liv[0] ? 'on' : ''}">${l[0]}</span>`).join('')}</div>`;
+}
+function pRating(S) {
+  const B = bilanciSP();
+  const serveSP = D.base && !D.base.sp;
+  const intro = `<h1 class="pagetitle">Rating</h1><p class="pagesub">Gli indicatori che guardano le banche per valutare l'affidabilità dell'azienda, calcolati da soli dallo stato patrimoniale e dal conto economico del bilancio caricato. Ogni indicatore vale da 1 a 3 punti: la somma dà il livello, da <b>AAA</b> (rischio molto basso) a <b>CCC</b>.</p>`;
+  if (!B.length) return intro + (serveSP ? `<div class="msg warn"><span>⚠</span><span>Il bilancio di riferimento è stato caricato prima che leggessi anche lo stato patrimoniale. <b>Ricaricalo</b> (stesso PDF): le classificazioni restano.</span></div>${caricaBox('base')}` : vuoto());
+  const ro = ME.admin ? '' : 'disabled';
+  const col = (f) => B.map(f).join('');
+  const riga = (l, f, cls = '') => `<tr class="${cls}"><td>${l}</td>${col(f)}</tr>`;
+  const imp = (b, x, tot) => `<td>${eur(x)}</td><td class="muted">${tot ? pct(x / tot) : ''}</td>`;
+  const top = B[0];
+  return intro + `
+  ${serveSP ? `<div class="msg warn"><span>⚠</span><span>Il bilancio di riferimento ${D.base.anno} non ha ancora lo stato patrimoniale: ricaricalo in Impostazioni per vederlo anche qui.</span></div>` : ''}
+  <div class="rt-hero">
+    <div class="card" style="margin:0;display:flex;gap:22px;align-items:center;flex-wrap:wrap">${badge(top.r, true)}
+      <div style="flex:1;min-width:240px"><div class="muted" style="font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.04em">${esc(top.titolo)}</div>
+        <div style="font-family:var(--font-brand);font-size:20px;font-weight:700;color:var(--navy);margin:2px 0 10px">Livello ${top.r.liv[0]} · ${top.r.liv[1].toLowerCase()}</div>${scala(top.r)}
+        ${B.length > 1 ? `<div class="row" style="margin-top:12px">${B.slice(1).map(b => `<span class="rt-mini" style="--rc:${b.r.liv[2]}">${esc(b.titolo)}: <b>${b.r.liv[0]}</b></span>`).join('')}</div>` : ''}</div></div>
+  </div>
+  <div class="card"><h2>Principali indicatori</h2>
+  <div class="table-scroll" style="max-height:none"><table class="dt"><thead><tr><th>Indicatore <span style="text-transform:none;font-weight:600">(valore ottimale)</span></th>${col(b => `<th>${esc(b.titolo)}</th><th class="c">Punti</th>`)}</tr></thead><tbody>
+    ${top.r.ind.map((it, i) => `<tr><td><b>${it.l}</b> <span class="muted">(${it.ott})</span><div class="muted" style="font-size:12px;white-space:normal;max-width:420px">${it.spieg}</div></td>${col(b => { const x = b.r.ind[i]; return `<td><b>${x.fmt(x.v)}</b></td><td class="c">${punti(x.punti)}</td>`; })}</tr>`).join('')}
+    <tr class="tot"><td>Punteggio</td>${col(b => `<td></td><td class="c"><b>${b.r.tot}/12</b></td>`)}</tr>
+    <tr class="key"><td>Livello</td>${col(b => `<td colspan="2" class="c"><span class="rt-chip" style="--rc:${b.r.liv[2]}">${b.r.liv[0]}</span> ${b.r.liv[1]}</td>`)}</tr>
+  </tbody></table></div></div>
+  <div class="charts">
+  <div class="card" style="margin:0"><h2>Sintesi di stato patrimoniale</h2>
+  <div class="table-scroll" style="max-height:none"><table class="dt"><thead><tr><th></th>${col(b => `<th>${esc(b.titolo)}</th><th>%</th>`)}</tr></thead><tbody>
+    ${riga('Rimanenze', b => imp(b, b.s.rim, b.s.totAtt))}
+    ${riga('Altro attivo circolante', b => imp(b, b.s.altroAC, b.s.totAtt))}
+    ${riga('Immobilizzazioni (al netto dei fondi)', b => imp(b, b.s.immob, b.s.totAtt))}
+    ${B.some(b => b.s.A.creditiOltre) ? riga('Crediti oltre 12 mesi', b => imp(b, b.s.A.creditiOltre, b.s.totAtt)) : ''}
+    ${riga('Totale attivo', b => `<td>${eur(b.s.totAtt)}</td><td>100%</td>`, 'tot')}
+    ${riga('Passivo circolante', b => imp(b, b.s.pasCirc, b.s.totPas))}
+    ${riga('Passivo a medio/lungo termine', b => imp(b, b.s.pasML, b.s.totPas))}
+    ${riga('Mezzi propri (con l\'utile)', b => imp(b, b.s.mezzi, b.s.totPas))}
+    ${riga('Totale passivo', b => `<td>${eur(b.s.totPas)}</td><td>100%</td>`, 'tot')}
+  </tbody></table></div>${B.some(b => !b.s.quadra) ? '<p class="neg" style="font-size:12.5px">⚠ Attivo e passivo non quadrano: controlla la classificazione delle voci patrimoniali in Impostazioni.</p>' : ''}</div>
+  <div class="card" style="margin:0"><h2>Dati di conto economico</h2>
+  <div class="table-scroll" style="max-height:none"><table class="dt"><thead><tr><th></th>${col(b => `<th>${esc(b.titolo)}</th>`)}</tr></thead><tbody>
+    ${riga('Fatturato', b => `<td>${eur(b.k.fatt)}</td>`)}
+    ${riga('Ammortamenti', b => `<td>${eur(b.k.A.ammortamenti)}</td>`)}
+    ${riga('Oneri finanziari (al netto dei proventi)', b => `<td>${eur(b.r.onFin)}</td>`)}
+    ${riga('Utile (perdita) del periodo', b => `<td class="${b.k.utile < 0 ? 'neg' : ''}">${eur(b.k.utile)}</td>`)}
+    ${riga('EBITDA', b => `<td>${eur(b.k.ebitda)}</td>`)}
+  </tbody></table></div>${B.some(b => b.f < 0.999) ? '<p class="muted" style="font-size:12.5px">Per i bilanci infrannuali il cash flow e il DSCR sono riportati a un anno intero.</p>' : ''}</div>
+  </div>
+  <div class="card" style="margin-top:18px"><h2>DSCR · sostenibilità del debito</h2>
+    <p class="muted" style="font-size:13px;margin:-4px 0 12px">(EBITDA − imposte pagate nell'anno) ÷ rate dei finanziamenti dell'anno (quota capitale + interessi). Le rate non sono nel bilancio: scrivile qui. Le imposte le propongo dal conto economico, puoi correggerle.</p>
+    <div class="table-scroll" style="max-height:none"><table class="dt"><thead><tr><th></th>${col(b => `<th>${esc(b.titolo)}</th>`)}</tr></thead><tbody>
+      ${riga('EBITDA' + (B.some(b => b.f < 0.999) ? ' (anno intero)' : ''), b => `<td>${eur(b.k.ebitda / (b.f || 1))}</td>`)}
+      ${riga('Imposte pagate nell\'anno', b => `<td><input inputmode="decimal" data-rt="${esc(b.id)}" data-campo="imposte" value="${esc(nf0.format(Math.round(b.r.imposte)))}" ${ro}></td>`)}
+      ${riga('Rate dei finanziamenti nell\'anno', b => `<td><input inputmode="decimal" data-rt="${esc(b.id)}" data-campo="rate" value="${b.r.rate ? esc(nf0.format(Math.round(b.r.rate))) : ''}" placeholder="da inserire" ${ro}></td>`)}
+      ${riga('DSCR', b => `<td><b class="${b.r.dscr == null ? 'muted' : b.r.dscr > 1.05 ? 'pos' : b.r.dscr < 0.95 ? 'neg' : ''}" style="font-size:16px">${b.r.dscr == null ? '—' : nf2.format(b.r.dscr)}</b></td>`, 'tot')}
+    </tbody></table></div>
+    <div class="ricl-legend" style="margin-top:12px"><span><b class="pos">maggiore di 1</b>: l'impresa riesce a far fronte agli impegni con i finanziatori</span><span><b>uguale a 1</b>: non resta denaro per investimenti o dividendi</span><span><b class="neg">minore di 1</b>: tensione finanziaria, possibili difficoltà a rimborsare</span></div></div>
+  <div class="card"><h2>Scala dei livelli</h2><div class="rt-leg">${LIVELLI.map(l => `<span><span class="rt-chip" style="--rc:${l[2]}">${l[0]}</span>${l[1]}</span>`).join('')}</div></div>`;
+}
+const punti = n => `<span class="rt-dots" title="${n} su 3">${[1, 2, 3].map(i => `<i class="${i <= n ? (n === 3 ? 'g' : n === 2 ? 'y' : 'r') : ''}"></i>`).join('')}</span>`;
 
 /* ---------- grafici ---------- */
 function disegnaGrafici(S) {
@@ -683,8 +862,17 @@ async function leggiPdf(file, cosa) {
   const oggi = new Date().toISOString().slice(0, 10), anno = +r.al.slice(0, 4);
   const valori = {}; for (const x of r.voci) valori[x.id] = x.saldo;
   const controllo = r.controllo;
+  // stato patrimoniale (per il rating): voci con la loro area, proposta la prima volta
+  D.vociSP = D.vociSP || {};
+  const sp = {}; for (const x of r.patrimoniale || []) {
+    sp[x.id] = x.saldo;
+    const v = D.vociSP[x.id];
+    if (v) Object.assign(v, { descr: x.descr, mastro: x.mastro });
+    else D.vociSP[x.id] = { id: x.id, codice: x.codice, descr: x.descr, lato: x.lato, mastro: x.mastro, area: proponiSP(x) };
+  }
+  const conSP = (r.patrimoniale || []).length ? { sp, controlloSP: r.controlloSP } : {};
   if (cosa === 'base') {
-    if (D.base && !confirm(`Sostituire il bilancio di riferimento ${D.base.anno} con quello ${anno}? Le classificazioni delle voci restano.`)) return toast('Nessuna modifica.');
+    if (D.base && !(D.base.anno === anno && !D.base.sp) && !confirm(`Sostituire il bilancio di riferimento ${D.base.anno} con quello ${anno}? Le classificazioni delle voci restano.`)) return toast('Nessuna modifica.');
     let nuove = 0;
     for (const x of r.voci) {
       const v = D.voci[x.id];
@@ -692,7 +880,7 @@ async function leggiPdf(file, cosa) {
       else { const p = proponi(x); D.voci[x.id] = { id: x.id, codice: x.codice, descr: x.descr, lato: x.lato, mastro: x.mastro, conto: x.conto, area: p.area, natura: p.natura, proposta: true }; nuove++; }
       if (D.voci[x.id].nuova) D.voci[x.id].nuova = false;
     }
-    D.base = { anno, dal: r.dal, al: r.al, ditta: r.ditta, file: r.file, caricatoIl: oggi, caricatoDa: ME.utente, valori, controllo };
+    D.base = { anno, dal: r.dal, al: r.al, ditta: r.ditta, file: r.file, caricatoIl: oggi, caricatoDa: ME.utente, valori, controllo, ...conSP };
     if (!D.budget.anno || +D.budget.anno <= anno) D.budget.anno = anno + 1;
     salva(true); render();
     toast(`${r.voci.length} voci lette · utile ${eur(controllo.utile)}${controllo.ok ? ' ✓' : ' (non quadra: controlla)'}${nuove ? ` · ${nuove} classificate in automatico: controllale` : ''}`, 7000);
@@ -708,7 +896,7 @@ async function leggiPdf(file, cosa) {
     D.voci[x.id] = { id: x.id, codice: x.codice, descr: x.descr, lato: x.lato, mastro: x.mastro, conto: x.conto, area: p.area, natura: p.natura, nuova: true, proposta: true };
     nuoveIds.push(x.id);
   }
-  const c = { id: esiste?.id || 'c' + Date.now().toString(36), anno, dal: r.dal && r.dal.slice(0, 4) === r.al.slice(0, 4) ? r.dal : anno + '-01-01', al: r.al, file: r.file, caricatoIl: oggi, caricatoDa: ME.utente, valori, controllo, nuove: nuoveIds };
+  const c = { id: esiste?.id || 'c' + Date.now().toString(36), anno, dal: r.dal && r.dal.slice(0, 4) === r.al.slice(0, 4) ? r.dal : anno + '-01-01', al: r.al, file: r.file, caricatoIl: oggi, caricatoDa: ME.utente, valori, controllo, nuove: nuoveIds, ...conSP };
   D.consuntivi = D.consuntivi.filter(x => x.al !== r.al).concat(c);
   D.scelto = c.id;
   if (!D.budget.anno) D.budget.anno = anno;
@@ -749,6 +937,8 @@ document.addEventListener('change', e => {
     if (r.metodo === 'auto') delete D.budget.righe[d.bm]; else D.budget.righe[d.bm] = r;
     salva(); return setTimeout(render); }
   if (d.bv) { const r = D.budget.righe[d.bv] || { metodo: 'importo' }; r.valore = num(t.value); D.budget.righe[d.bv] = r; salva(); return setTimeout(render); }
+  if (d.areaSp) { D.vociSP[d.areaSp].area = t.value; salva(); return setTimeout(render); }
+  if (d.rt) { D.rating = D.rating || {}; const r = D.rating[d.rt] = D.rating[d.rt] || {}; r[d.campo] = t.value.trim() === '' ? null : num(t.value); salva(); return setTimeout(render); }
   if (d.bp) { D.budget[d.bp] = d.bp === 'anno' ? +t.value || null : num(t.value); salva(); return setTimeout(render); }
 });
 let cercaT;
