@@ -289,6 +289,8 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 .powered-by{padding:14px 18px 4px; display:flex; align-items:center; gap:8px; border-top:1px solid rgba(255,255,255,.14);}
 .powered-by span{font-size:10px; opacity:.55; text-transform:uppercase; letter-spacing:.04em;}
 .powered-by img{height:20px; width:auto; opacity:.85;}
+.incid{float:right;margin-left:12px;margin-right:4px;font-size:12px;font-weight:700;color:#6E4C7B;background:#F1EAF4;border-radius:99px;padding:1px 9px;line-height:1.6}
+.incid:empty{display:none}
 </style>
 <!-- dopo una modifica la pagina resta dov'era (comune a tutte le app To Smile) -->
 <script src="https://appgestione.it/static/resta-qui.js?v=3" defer></script>
@@ -3143,6 +3145,7 @@ revArr[parseInt(inp.dataset.m,10)] = parseFloat(inp.value)||0;
 saveState();
 var el2 = document.getElementById('rowtot_rev_'+siteId);
 if(el2) el2.innerHTML = '<b>'+fmtEUR(sum(revArr))+'</b>';
+aggiornaIncidenze(sum(revArr));
 });
 });
 main.appendChild(card0);
@@ -3198,8 +3201,10 @@ var summary = document.createElement('summary');
 var catTotalSpan = document.createElement('span');
 catTotalSpan.style.float='right'; catTotalSpan.style.color='#2F8F9E';
 catTotalSpan.textContent = fmtEUR(catTotal);
+var incF = spanIncid(catTotal, sum(revArr)); incF.dataset.tot = catTotal;
 summary.appendChild(document.createTextNode(cat.name+' '));
 summary.appendChild(catTotalSpan);
+summary.appendChild(incF);
 det.appendChild(summary);
 if(items.length===0){
 det.appendChild(el('div','help-tip', cat.perSite ? 'Nessun collaboratore in questa sede. Aggiungilo qui sotto: il nome resta solo in questa sede.' : 'Nessuna voce in questo macro-gruppo.'));
@@ -3235,6 +3240,7 @@ var rowTotEl = document.getElementById('rowtot_cf_'+siteId+'_'+iid);
 if(rowTotEl) rowTotEl.textContent = fmtEUR(sum(arr));
 var newCatTotal = sum(items.map(function(i2){ return sum(consArrFixed(i2.id,siteId)); }));
 catTotalSpan.textContent = fmtEUR(newCatTotal);
+incF.dataset.tot = newCatTotal; incF.textContent = fmtIncid(newCatTotal, sum(revArr));
 aggiornaRigaTotaleMacro(idTotF, mesiCatF());
 });
 });
@@ -3268,12 +3274,15 @@ var summary = document.createElement('summary');
 var catTotalSpan = document.createElement('span');
 catTotalSpan.style.float='right'; catTotalSpan.style.color='#2F8F9E';
 catTotalSpan.textContent = fmtEUR(catTotal);
+var incV = spanIncid(catTotal, sum(revArr)); incV.dataset.tot = catTotal;
 summary.appendChild(document.createTextNode(c.name+' '));
 summary.appendChild(catTotalSpan);
+summary.appendChild(incV);
 det.appendChild(summary);
 function refreshCatTotal(){
 var t=0; for(var mm=0;mm<12;mm++) t += consVarCatMonth(c.id,siteId,mm);
 catTotalSpan.textContent = fmtEUR(t);
+incV.dataset.tot = t; incV.textContent = fmtIncid(t, sum(revArr));
 }
 if(!catObj.suppliers.length){
 var wrap = el('div','table-scroll');
@@ -3412,7 +3421,7 @@ STATE.fixedCats.forEach(function(cat){
 var items = STATE.fixedItems.filter(function(it){return it.catId===cat.id;}).filter(function(it){return isFixedItemFilledAny(it.id);});
 if(items.length===0) return;
 var catTotal = sum(items.map(function(it){ var t=0; for(var m2=0;m2<12;m2++){ STATE.sites.forEach(function(s){ t+=consFixedMonth(it.id,s.id,m2); }); } return t; }));
-var det = makeDetails('cons_total_fixed_'+cat.id, cat.name+' <span style="float:right;color:#2F8F9E;">'+fmtEUR(catTotal)+'</span>');
+var det = makeDetails('cons_total_fixed_'+cat.id, cat.name+' <span style="float:right;color:#2F8F9E;">'+fmtEUR(catTotal)+'</span><span class="incid" title="Incidenza sul fatturato incassato caricato">'+fmtIncid(catTotal,totRev)+'</span>');
 var wrap = el('div','table-scroll');
 var table = document.createElement('table'); table.className='datatable';
 var head = '<tr><th>Voce</th>'+MONTHS_SHORT.map(function(mm){return '<th>'+mm+'</th>';}).join('')+'<th>Tot.</th></tr>';
@@ -3437,7 +3446,7 @@ card3.appendChild(el('h2',null,'Costi variabili &mdash; totale importi reali per
 STATE.varCats.forEach(function(c){
 if(!isVarCatFilledAny(c.id)) return;
 var catTotal=0; for(var m3=0;m3<12;m3++) catTotal += consVarTotalOfCatAllSites(c.id,m3);
-var det = makeDetails('cons_total_var_'+c.id, c.name+' <span style="float:right;color:#2F8F9E;">'+fmtEUR(catTotal)+'</span>');
+var det = makeDetails('cons_total_var_'+c.id, c.name+' <span style="float:right;color:#2F8F9E;">'+fmtEUR(catTotal)+'</span><span class="incid" title="Incidenza sul fatturato incassato caricato">'+fmtIncid(catTotal,totRev)+'</span>');
 var wrap = el('div','table-scroll');
 var table = document.createElement('table'); table.className='datatable';
 var head = '<tr><th>Voce</th>'+MONTHS_SHORT.map(function(mm){return '<th>'+mm+'</th>';}).join('')+'<th>Tot.</th></tr>';
@@ -3451,6 +3460,10 @@ card3.appendChild(det);
 main.appendChild(card3);
 }
 // Riga in fondo a ogni macro-voce: somma per mese delle voci (quanto speso nella macro-voce in quel mese)
+// Incidenza della macro voce sul fatturato incassato caricato (nella riga del nome, in Consuntivo)
+function fmtIncid(costo, fatt){ if(!fatt || !costo) return ''; var p=costo/fatt*100; return p.toLocaleString('it-IT',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
+function spanIncid(costo, fatt){ var sp=document.createElement('span'); sp.className='incid'; sp.title='Incidenza sul fatturato incassato caricato'; sp.textContent=fmtIncid(costo,fatt); return sp; }
+function aggiornaIncidenze(fatt){ document.querySelectorAll('.incid[data-tot]').forEach(function(sp){ sp.textContent=fmtIncid(parseFloat(sp.dataset.tot)||0, fatt); }); }
 function rigaTotaleMacro(label, mesi, idBase, extraTd){
 var r='<tr class="total-row"><td style="text-align:left;white-space:nowrap;">Totale '+String(label).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</td>';
 for(var i=0;i<12;i++) r+='<td'+(idBase?' id="'+idBase+'_'+i+'"':'')+'>'+fmtEUR(mesi[i]||0)+'</td>';
