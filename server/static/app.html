@@ -2522,10 +2522,12 @@ overlay.addEventListener('click', function(ev){ if(ev.target===overlay) closeApp
    Budget = pagina Budget costi (fatturato stimato, costi fissi con ammortamenti, % costi variabili). siteId null = tutta l'azienda. */
 function datiCruscotto(siteId){
 var ids = siteId ? [siteId] : STATE.sites.map(function(x){return x.id;});
-var r = {fatt:0,fissi:0,vari:0,fattP:0,fissiP:0,variP:0,budFattPeriodo:0,mcMax:0,mcMin:12};
+var r = {fatt:0,fissi:0,vari:0,fattP:0,fissiP:0,variP:0,budFattPeriodo:0,mcMax:0,mcMin:12,inc:0,incP:0};
 ids.forEach(function(id){
 var mc = mesiCompilati(id), f=0, fi=0, v=0;
-for(var m=0;m<mc;m++){ f+=baseMonthSite(id,m); fi+=consFixedTotalMonthSite(id,m); v+=consVarTotalMonthSite(id,m); }
+var ic=0;
+for(var m=0;m<mc;m++){ f+=baseMonthSite(id,m); ic+=consRevenueMonthSite(id,m); fi+=consFixedTotalMonthSite(id,m); v+=consVarTotalMonthSite(id,m); }
+r.inc+=ic; if(mc>0) r.incP+=ic/mc*12;
 r.fatt+=f; r.fissi+=fi; r.vari+=v;
 if(mc>0){ r.fattP+=f/mc*12; r.fissiP+=fi/mc*12; r.variP+=v/mc*12; }
 r.budFattPeriodo += (Number(STATE.budget.revenue[id])||0)*mc;
@@ -2581,10 +2583,15 @@ return t;
 main.appendChild(el('div','cru-group',BASE()+' e utile'));
 var g1 = el('div','cru-grid');
 var pctAnno = d.budFattAnno ? Math.min(d.fatt/d.budFattAnno,1) : 0, pctProi = d.budFattAnno ? Math.min(d.fattP/d.budFattAnno,1) : 0;
-g1.appendChild(tile({ l:BASE()+' a oggi', v:fmtEUR(d.fatt), c:'var(--teal)',
+if(baseProd()) g1.appendChild(tile({ l:'Produzione a oggi', v:fmtEUR(d.fatt), c:'var(--teal)',
+s: d.inc ? (fmtPct(d.fatt/d.inc,0)+' del fatturato incassato ('+fmtEUR(d.inc)+')') : 'Nessun fatturato incassato nei mesi compilati.',
+title:'Produzione a oggi diviso fatturato incassato a oggi' }));
+else g1.appendChild(tile({ l:BASE()+' a oggi', v:fmtEUR(d.fatt), c:'var(--teal)',
 meter: d.budFattAnno ? '<i style="width:'+(pctAnno*100).toFixed(1)+'%"></i>' : '',
 s: d.budFattAnno ? (fmtPct(d.fatt/d.budFattAnno,0)+' del budget annuo &middot; rispetto al budget del periodo '+dEuro(d.fatt, d.budFattPeriodo, true)) : 'Imposta '+(baseProd()?'la produzione stimata':'il fatturato stimato')+' nel Budget per il confronto.' }));
-g1.appendChild(tile({ l:BASE()+' a fine anno <small>(stima)</small>', v:fmtEUR(d.fattP), c:'var(--teal)', stima:true,
+if(baseProd()) g1.appendChild(tile({ l:'Produzione a fine anno <small>(stima)</small>', v:fmtEUR(d.fattP), c:'var(--teal)', stima:true,
+s: d.incP ? (fmtPct(d.fattP/d.incP,0)+' del fatturato incassato stimato ('+fmtEUR(d.incP)+')') : 'Al ritmo dei mesi compilati.' }));
+else g1.appendChild(tile({ l:BASE()+' a fine anno <small>(stima)</small>', v:fmtEUR(d.fattP), c:'var(--teal)', stima:true,
 s: d.budFattAnno ? ('Budget annuo '+fmtEUR(d.budFattAnno)+' '+dEuro(d.fattP, d.budFattAnno, true)) : 'Al ritmo dei mesi compilati.' }));
 g1.appendChild(tile({ l:'Utile a oggi', v:fmtEUR(d.utile), vc: d.utile>=0?'pos':'neg', c: d.utile>=0?'var(--green)':'var(--red)',
 s: (d.fatt ? fmtPct(d.utile/d.fatt)+' del'+(baseProd()?'la produzione':' fatturato') : '&nbsp;') }));
