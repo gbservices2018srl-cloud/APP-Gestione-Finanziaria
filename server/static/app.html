@@ -291,6 +291,10 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 .powered-by img{height:20px; width:auto; opacity:.85;}
 .incid{float:right;margin-left:12px;margin-right:4px;font-size:12px;font-weight:700;color:#6E4C7B;background:#F1EAF4;border-radius:99px;padding:1px 9px;line-height:1.6}
 .incid:empty{display:none}
+.base-switch{display:inline-flex;align-items:center;gap:4px;margin:2px 0 14px;padding:3px;border:1px solid #dfe4e6;border-radius:999px;background:#fff;font-size:12.5px}
+.base-switch span{padding:0 8px 0 10px;color:#5c6b72;font-weight:600}
+.base-switch button{border:0;background:none;padding:5px 12px;border-radius:999px;font-weight:700;color:#5c6b72;cursor:pointer;font-size:12.5px}
+.base-switch button.on{background:#2F8F9E;color:#fff}
 </style>
 <!-- dopo una modifica la pagina resta dov'era (comune a tutte le app To Smile) -->
 <script src="https://appgestione.it/static/resta-qui.js?v=3" defer></script>
@@ -1284,6 +1288,20 @@ function consRevenueMonthSite(siteId,m){ var arr = STATE.consuntivo.revenue[site
 function consRevenueMonthAll(m){ var t=0; STATE.sites.forEach(function(s){ t+=consRevenueMonthSite(s.id,m); }); return t; }
 function consProduzioneMonthSite(siteId,m){ var arr = STATE.consuntivo.produzione[siteId]; return arr?(Number(arr[m])||0):0; }
 function consProduzioneMonthAll(m){ var t=0; STATE.sites.forEach(function(s){ t+=consProduzioneMonthSite(s.id,m); }); return t; }
+// BASE DI CALCOLO (tasto in alto nelle pagine): utile, incidenze e percentuali sul fatturato incassato (predefinito) o sul valore della produzione.
+// Cambia solo i calcoli: i dati inseriti restano tutti come sono.
+function baseProd(){ return !!(STATE && STATE.baseCalcolo==='produzione'); }
+function baseMonthSite(siteId,m){ return baseProd() ? consProduzioneMonthSite(siteId,m) : consRevenueMonthSite(siteId,m); }
+function baseMonthAll(m){ return baseProd() ? consProduzioneMonthAll(m) : consRevenueMonthAll(m); }
+function BASE(){ return baseProd() ? 'Produzione' : 'Fatturato'; }
+function baseTxt(){ return baseProd() ? 'produzione' : 'fatturato'; }
+function tastoBase(){
+var w = el('div','base-switch');
+w.innerHTML = '<span>Calcoli su</span><button type="button" data-b="incassato" class="'+(baseProd()?'':'on')+'">Incassato</button><button type="button" data-b="produzione" class="'+(baseProd()?'on':'')+'">Produzione</button>';
+w.title = 'Base per utile, incidenze dei costi e percentuali: fatturato incassato oppure valore della produzione. I dati inseriti non cambiano.';
+w.querySelectorAll('button').forEach(function(b){ b.onclick = function(){ var v = b.dataset.b==='produzione' ? 'produzione' : null; if((STATE.baseCalcolo||null)===v) return; if(v) STATE.baseCalcolo = v; else delete STATE.baseCalcolo; saveState(); render(); }; });
+return w;
+}
 function bankBalanceMonth(accountId,year,m){ var yr = STATE.bankBalances[accountId] && STATE.bankBalances[accountId][year]; return yr?(Number(yr[m])||0):0; }
 function bankTotalMonth(year,m){ var t=0; STATE.bankAccounts.forEach(function(a){ t+=bankBalanceMonth(a.id,year,m); }); return t; }
 function findStatsYear(year){ return STATE.statsYears.find(function(y){return y.year===year;}); }
@@ -1302,7 +1320,7 @@ var override = STATE.consuntivo.mesiOverride[siteId];
 if(override) return override;
 var n=0;
 for(var m=0;m<12;m++){
-var has = consRevenueMonthSite(siteId,m)!==0;
+var has = consRevenueMonthSite(siteId,m)!==0 || baseMonthSite(siteId,m)!==0;
 if(!has){ for(var i=0;i<STATE.fixedItems.length && !has;i++){ if(consFixedMonth(STATE.fixedItems[i].id,siteId,m)!==0) has=true; } }
 if(!has){ for(var c=0;c<STATE.varCats.length && !has;c++){ if(consVarCatMonth(STATE.varCats[c].id,siteId,m)!==0) has=true; } }
 if(has) n=m+1;
@@ -1337,11 +1355,11 @@ var totFixedBudgetAnno = sum(fixedRows.map(function(r){return r.budgetAnno;}));
 var totFixedProiezione = sum(fixedRows.map(function(r){return r.proiezione;}));
 var totVarBudgetAnno = sum(varRows.map(function(r){return r.budgetAnno;}));
 var totVarProiezione = sum(varRows.map(function(r){return r.proiezione;}));
-var fatturatoYtd=0; for(var m=0;m<mc;m++) fatturatoYtd += consRevenueMonthSite(siteId,m);
+var fatturatoYtd=0; for(var m=0;m<mc;m++) fatturatoYtd += baseMonthSite(siteId,m);
 var fatturatoProiezione = mc>0 ? fatturatoYtd/mc*12 : 0;
 var incFissiArr=[], incVarArr=[];
 for(var m2=0;m2<mc;m2++){
-var ft = consRevenueMonthSite(siteId,m2);
+var ft = baseMonthSite(siteId,m2);
 if(ft>0){ incFissiArr.push(consFixedTotalMonthSite(siteId,m2)/ft); incVarArr.push(consVarTotalMonthSite(siteId,m2)/ft); }
 }
 var incFissiMedia = incFissiArr.length? sum(incFissiArr)/incFissiArr.length : 0;
@@ -1418,7 +1436,7 @@ var rows=[]; var cumFatt=0,cumFissi=0,cumVar=0,cumRis=0;
 var cumByCol = {};
 STATE.ceColumns.forEach(function(col){ cumByCol[col.id]=0; });
 for(var m=0;m<12;m++){
-var fatt = consRevenueMonthAll(m);
+var fatt = baseMonthAll(m);
 var fissi = consFixedTotalMonthAll(m);
 var vari = consVarTotalMonthAll(m);
 var risultato = fatt-fissi-vari;
@@ -1564,7 +1582,7 @@ basedOnMonths: monthsElapsed
 };
 STATE.sites.forEach(function(site){
 var revSum = 0;
-for(var m=0;m<monthsElapsed;m++){ revSum += consRevenueMonthSite(site.id, m); }
+for(var m=0;m<monthsElapsed;m++){ revSum += baseMonthSite(site.id, m); }
 draft.revenue[site.id] = revSum / monthsElapsed;
 
 STATE.fixedItems.forEach(function(item){
@@ -1819,6 +1837,10 @@ return;
 }
 var fn = RENDERERS[currentPage];
 if(fn) fn(main);
+if(['dashboard','budget','consuntivo','scostamenti','contoeconomico'].indexOf(currentPage)>=0 && STATE && STATE.sites && STATE.sites.length){
+var dopo = main.querySelector('p.pagesub') || main.querySelector('h1.pagetitle');
+if(dopo) dopo.parentNode.insertBefore(tastoBase(), dopo.nextSibling);
+}
 }
 function renderLockedPage(main){
 var p = PAGES.find(function(x){return x.id===currentPage;});
@@ -2503,7 +2525,7 @@ var ids = siteId ? [siteId] : STATE.sites.map(function(x){return x.id;});
 var r = {fatt:0,fissi:0,vari:0,fattP:0,fissiP:0,variP:0,budFattPeriodo:0,mcMax:0,mcMin:12};
 ids.forEach(function(id){
 var mc = mesiCompilati(id), f=0, fi=0, v=0;
-for(var m=0;m<mc;m++){ f+=consRevenueMonthSite(id,m); fi+=consFixedTotalMonthSite(id,m); v+=consVarTotalMonthSite(id,m); }
+for(var m=0;m<mc;m++){ f+=baseMonthSite(id,m); fi+=consFixedTotalMonthSite(id,m); v+=consVarTotalMonthSite(id,m); }
 r.fatt+=f; r.fissi+=fi; r.vari+=v;
 if(mc>0){ r.fattP+=f/mc*12; r.fissiP+=fi/mc*12; r.variP+=v/mc*12; }
 r.budFattPeriodo += (Number(STATE.budget.revenue[id])||0)*mc;
@@ -2556,36 +2578,36 @@ if(o.s) t.appendChild(el('div','s', o.s));
 if(o.title) t.title = o.title;
 return t;
 }
-main.appendChild(el('div','cru-group','Fatturato e utile'));
+main.appendChild(el('div','cru-group',BASE()+' e utile'));
 var g1 = el('div','cru-grid');
 var pctAnno = d.budFattAnno ? Math.min(d.fatt/d.budFattAnno,1) : 0, pctProi = d.budFattAnno ? Math.min(d.fattP/d.budFattAnno,1) : 0;
-g1.appendChild(tile({ l:'Fatturato a oggi', v:fmtEUR(d.fatt), c:'var(--teal)',
+g1.appendChild(tile({ l:BASE()+' a oggi', v:fmtEUR(d.fatt), c:'var(--teal)',
 meter: d.budFattAnno ? '<i style="width:'+(pctAnno*100).toFixed(1)+'%"></i>' : '',
-s: d.budFattAnno ? (fmtPct(d.fatt/d.budFattAnno,0)+' del budget annuo &middot; rispetto al budget del periodo '+dEuro(d.fatt, d.budFattPeriodo, true)) : 'Imposta il fatturato stimato nel Budget per il confronto.' }));
-g1.appendChild(tile({ l:'Fatturato a fine anno <small>(stima)</small>', v:fmtEUR(d.fattP), c:'var(--teal)', stima:true,
+s: d.budFattAnno ? (fmtPct(d.fatt/d.budFattAnno,0)+' del budget annuo &middot; rispetto al budget del periodo '+dEuro(d.fatt, d.budFattPeriodo, true)) : 'Imposta '+(baseProd()?'la produzione stimata':'il fatturato stimato')+' nel Budget per il confronto.' }));
+g1.appendChild(tile({ l:BASE()+' a fine anno <small>(stima)</small>', v:fmtEUR(d.fattP), c:'var(--teal)', stima:true,
 s: d.budFattAnno ? ('Budget annuo '+fmtEUR(d.budFattAnno)+' '+dEuro(d.fattP, d.budFattAnno, true)) : 'Al ritmo dei mesi compilati.' }));
 g1.appendChild(tile({ l:'Utile a oggi', v:fmtEUR(d.utile), vc: d.utile>=0?'pos':'neg', c: d.utile>=0?'var(--green)':'var(--red)',
-s: (d.fatt ? fmtPct(d.utile/d.fatt)+' del fatturato' : '&nbsp;') }));
+s: (d.fatt ? fmtPct(d.utile/d.fatt)+' del'+(baseProd()?'la produzione':' fatturato') : '&nbsp;') }));
 g1.appendChild(tile({ l:'Utile a fine anno <small>(stima)</small>', v:fmtEUR(d.utileP), vc: d.utileP>=0?'pos':'neg', c: d.utileP>=0?'var(--green)':'var(--red)', stima:true,
 s: d.haBudget ? ('Budget '+fmtEUR(d.budUtileAnno)+' '+dEuro(d.utileP, d.budUtileAnno, true)) : 'Al ritmo dei mesi compilati.' }));
 main.appendChild(g1);
-main.appendChild(el('div','cru-group','Costi e margine <span style="text-transform:none;letter-spacing:0;font-weight:600">&middot; sul fatturato a oggi</span>'));
+main.appendChild(el('div','cru-group','Costi e margine <span style="text-transform:none;letter-spacing:0;font-weight:600">&middot; sul'+(baseProd()?'la produzione':' fatturato')+' a oggi</span>'));
 var g2 = el('div','cru-grid');
 g2.appendChild(tile({ l:'Incidenza costi fissi', v:fmtPct(d.incFissi), c:'var(--navy)',
 s: (d.haBudget ? 'Budget '+fmtPct(d.budIncFissi)+' ' : '')+dPunti(d.incFissi, d.budIncFissi),
-title:'Costi fissi a oggi ('+fmtEUR(d.fissi)+') diviso fatturato a oggi' }));
+title:'Costi fissi a oggi ('+fmtEUR(d.fissi)+') diviso '+baseTxt()+' a oggi' }));
 g2.appendChild(tile({ l:'Incidenza costi variabili', v:fmtPct(d.incVar), c:'var(--purple)',
 s: (d.haBudget ? 'Budget '+fmtPct(d.budIncVar)+' ' : '')+dPunti(d.incVar, d.budIncVar),
-title:'Costi variabili a oggi ('+fmtEUR(d.vari)+') diviso fatturato a oggi' }));
+title:'Costi variabili a oggi ('+fmtEUR(d.vari)+') diviso '+baseTxt()+' a oggi' }));
 var mdcDelta = d.haBudget ? (function(){ var p=(d.mdcPct-d.budMdcPct)*100, cls=Math.abs(p)<0.05?'flat':(p>0?'good':'bad');
 return '<span class="d '+cls+'">'+(Math.abs(p)<0.05?'&#61; in linea':(p>0?'&#9650; +':'&#9660; &minus;')+Math.abs(p).toFixed(1)+' punti')+'</span>'; })() : '';
 g2.appendChild(tile({ l:'Margine di contribuzione', v:fmtEUR(d.mdc), c:'var(--amber)',
-s: fmtPct(d.mdcPct)+' del fatturato'+(d.haBudget ? ' &middot; budget '+fmtPct(d.budMdcPct)+' '+mdcDelta : ''),
-title:'Fatturato a oggi meno costi variabili a oggi: quello che resta per coprire i costi fissi e fare utile' }));
+s: fmtPct(d.mdcPct)+' del'+(baseProd()?'la produzione':' fatturato')+(d.haBudget ? ' &middot; budget '+fmtPct(d.budMdcPct)+' '+mdcDelta : ''),
+title:BASE()+' a oggi meno costi variabili a oggi: quello che resta per coprire i costi fissi e fare utile' }));
 g2.appendChild(tile({ l:'Punto di pareggio (BEP) attuale', v: d.bepAtt ? fmtEUR(d.bepAtt) : '&mdash;', c:'var(--red)',
-s: (d.bepAtt ? (d.fattP ? (d.fattP>=d.bepAtt ? 'Superato: a fine anno lo superi di '+fmtEUR(d.fattP-d.bepAtt) : 'A fine anno mancano '+fmtEUR(d.bepAtt-d.fattP)) : '') : 'Serve almeno un mese con fatturato.')
+s: (d.bepAtt ? (d.fattP ? (d.fattP>=d.bepAtt ? 'Superato: a fine anno lo superi di '+fmtEUR(d.fattP-d.bepAtt) : 'A fine anno mancano '+fmtEUR(d.bepAtt-d.fattP)) : '') : 'Serve almeno un mese con '+baseTxt()+'.')
  + (d.haBudget && d.bep && d.bepAtt ? '<br>Budget '+fmtEUR(d.bep)+' '+dEuro(d.bepAtt, d.bep, false) : ''),
-title:'Fatturato annuo che serve per coprire tutti i costi: costi fissi annui (al ritmo attuale) diviso margine di contribuzione %' }));
+title:BASE()+' annuo che serve per coprire tutti i costi: costi fissi annui (al ritmo attuale) diviso margine di contribuzione %' }));
 main.appendChild(g2);
 var more = document.createElement('details'); more.className = 'cru-more';
 more.innerHTML = '<summary>Altri indicatori</summary>';
@@ -2630,7 +2652,7 @@ var ce = calcContoEconomico();
 var mc = scost.mc;
 renderCruscotto(main, null);
 var two = el('div','two-col');
-var c1 = el('div','card'); c1.appendChild(el('h2',null,'Fatturato vs Costi &mdash; mese per mese'));
+var c1 = el('div','card'); c1.appendChild(el('h2',null,BASE()+' vs Costi &mdash; mese per mese'));
 c1.appendChild(el('div','help-tip','Clicca una colonna per aprire il Consuntivo mensile di quel mese.'));
 var chart1 = el('div','chart-wrap'); var cv1=document.createElement('canvas'); chart1.appendChild(cv1); c1.appendChild(chart1);
 two.appendChild(c1);
@@ -2652,8 +2674,8 @@ var c3c = el('div','card'); c3c.appendChild(el('h2',null,'Liquidit\u00e0, dalla 
 c3c.appendChild(el('div','help-tip','Somma dei saldi di tutti i conti correnti (Statistiche storiche), mese per mese, su tutti gli anni disponibili. Clicca un punto per aprire quel mese.'));
 var chart3c = el('div','chart-wrap'); chart3c.style.height='380px'; var cv3c=document.createElement('canvas'); chart3c.appendChild(cv3c); c3c.appendChild(chart3c);
 main.appendChild(c3c);
-main.appendChild(el('div','section-title','Fatturato'));
-var c4 = el('div','card'); c4.appendChild(el('h2',null,'Andamento fatturato per sede'));
+main.appendChild(el('div','section-title',BASE()));
+var c4 = el('div','card'); c4.appendChild(el('h2',null,'Andamento '+baseTxt()+' per sede'));
 c4.appendChild(el('div','help-tip','Clicca sui nomi nella legenda per nascondere/mostrare la linea di una sede. Clicca un punto per aprire quel mese in quella sede.'));
 var chart4 = el('div','chart-wrap'); chart4.style.height='380px'; var cv4=document.createElement('canvas'); chart4.appendChild(cv4); c4.appendChild(chart4);
 main.appendChild(c4);
@@ -2664,7 +2686,7 @@ var chart5 = el('div','chart-wrap'); chart5.style.height='380px'; var cv5=docume
 main.appendChild(c5);
 setTimeout(function(){
 new Chart(cv1,{type:'bar',data:{labels:MONTHS_SHORT,datasets:[
-{label:'Fatturato', data:ce.rows.map(function(r){return r.fatt;}), backgroundColor:'#2F8F9E'},
+{label:BASE(), data:ce.rows.map(function(r){return r.fatt;}), backgroundColor:'#2F8F9E'},
 {label:'Costi fissi', data:ce.rows.map(function(r){return r.fissi;}), backgroundColor:'#c0483f'},
 {label:'Costi variabili', data:ce.rows.map(function(r){return r.vari;}), backgroundColor:'#A36EA6'}
 ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},
@@ -2689,7 +2711,7 @@ var siteColors4 = ['#2F8F9E','#3B2647','#A36EA6','#c0483f','#3f8f5c','#F1E44D','
 var dsRev = [], dsProd = [];
 STATE.sites.forEach(function(s,idx){
 var color = siteColors4[idx % siteColors4.length];
-dsRev.push({label:s.name, data:MONTHS.map(function(_,m){return consRevenueMonthSite(s.id,m);}), borderColor:color, backgroundColor:color, fill:false, tension:.25});
+dsRev.push({label:s.name, data:MONTHS.map(function(_,m){return baseMonthSite(s.id,m);}), borderColor:color, backgroundColor:color, fill:false, tension:.25});
 dsProd.push({label:s.name, data:MONTHS.map(function(_,m){return consProduzioneMonthSite(s.id,m);}), borderColor:color, backgroundColor:color, fill:false, tension:.25});
 });
 new Chart(cv4,{type:'line',data:{labels:MONTHS_SHORT,datasets:dsRev},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},
@@ -2707,13 +2729,13 @@ var site = findSite(siteId);
 var scost = scostamentiSummary(siteId);
 var calcB = calcBudgetSite(siteId);
 var mc = scost.mc;
-var fattArr = MONTHS.map(function(_,m){ return consRevenueMonthSite(siteId,m); });
+var fattArr = MONTHS.map(function(_,m){ return baseMonthSite(siteId,m); });
 var fissiArr = MONTHS.map(function(_,m){ return consFixedTotalMonthSite(siteId,m); });
 var variArr = MONTHS.map(function(_,m){ return consVarTotalMonthSite(siteId,m); });
 var risNetto = sum(fattArr)-sum(fissiArr)-sum(variArr);
 renderCruscotto(main, siteId);
 var two = el('div','two-col');
-var c1 = el('div','card'); c1.appendChild(el('h2',null,'Fatturato vs Costi &mdash; mese per mese'));
+var c1 = el('div','card'); c1.appendChild(el('h2',null,BASE()+' vs Costi &mdash; mese per mese'));
 c1.appendChild(el('div','help-tip','Clicca una colonna per aprire il Consuntivo mensile di quel mese, per questa sede.'));
 var chart1 = el('div','chart-wrap'); var cv1=document.createElement('canvas'); chart1.appendChild(cv1); c1.appendChild(chart1);
 two.appendChild(c1);
@@ -2722,8 +2744,8 @@ c2.appendChild(el('div','help-tip','Clicca una fetta per aprire Budget costi di 
 var chart2 = el('div','chart-wrap'); var cv2=document.createElement('canvas'); chart2.appendChild(cv2); c2.appendChild(chart2);
 two.appendChild(c2);
 main.appendChild(two);
-main.appendChild(el('div','section-title','Fatturato'));
-var c4 = el('div','card'); c4.appendChild(el('h2',null,'Andamento fatturato'));
+main.appendChild(el('div','section-title',BASE()));
+var c4 = el('div','card'); c4.appendChild(el('h2',null,'Andamento '+baseTxt()));
 c4.appendChild(el('div','help-tip','Clicca un punto per aprire quel mese nel Consuntivo mensile.'));
 var chart4 = el('div','chart-wrap'); chart4.style.height='320px'; var cv4=document.createElement('canvas'); chart4.appendChild(cv4); c4.appendChild(chart4);
 main.appendChild(c4);
@@ -2734,7 +2756,7 @@ var chart5 = el('div','chart-wrap'); chart5.style.height='320px'; var cv5=docume
 main.appendChild(c5);
 setTimeout(function(){
 new Chart(cv1,{type:'bar',data:{labels:MONTHS_SHORT,datasets:[
-{label:'Fatturato', data:fattArr, backgroundColor:'#2F8F9E'},
+{label:BASE(), data:fattArr, backgroundColor:'#2F8F9E'},
 {label:'Costi fissi', data:fissiArr, backgroundColor:'#c0483f'},
 {label:'Costi variabili', data:variArr, backgroundColor:'#A36EA6'}
 ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},
@@ -2791,7 +2813,7 @@ main.appendChild(el('p','pagesub','Versione gratuita: solo il riepilogo. La cost
 var all2 = calcBudgetAll();
 var kpis2 = el('div','kpi-grid');
 function kpiFree(label,value){ var k=el('div','kpi'); k.appendChild(el('div','label',label)); k.appendChild(el('div','value',value)); return k; }
-kpis2.appendChild(kpiFree('Fatturato stimato mensile', fmtEUR(all2.tot.revenue)));
+kpis2.appendChild(kpiFree(BASE()+' stimat'+(baseProd()?'a':'o')+' mensile', fmtEUR(all2.tot.revenue)));
 kpis2.appendChild(kpiFree('Totale costi fissi/mese', fmtEUR(all2.tot.totFixedMese)));
 main.appendChild(kpis2);
 var upgradeBox = el('div','card');
@@ -2901,8 +2923,8 @@ return k;
 }
 function fixedBreakdownText(c){ return 'voci '+fmtEUR(c.fixedSum)+' + amm.to suppletivi '+fmtEUR(c.amm)+' ('+fmtPct(Number(STATE.budget.ammPct[si])||0)+')'; }
 kpis.className = 'kpi-grid sei';
-function incTxt(v, r){ return r ? 'Incidenza sul fatturato '+fmtPct(v/r) : 'Incidenza: imposta il fatturato'; }
-kpis.appendChild(kpi('Fatturato stimato mensile', fmtEUR(calc.revenue),'', 'kpi-revenue'));
+function incTxt(v, r){ return r ? 'Incidenza sul '+baseTxt()+' '+fmtPct(v/r) : 'Incidenza: imposta il '+baseTxt(); }
+kpis.appendChild(kpi(BASE()+' stimat'+(baseProd()?'a':'o')+' mensile', fmtEUR(calc.revenue),'', 'kpi-revenue'));
 var kf = kpi('Costi fissi/mese', fmtEUR(calc.totFixedMese),'','kpi-fixed', incTxt(calc.totFixedMese, calc.revenue), 'kpi-fixed-sub'); kf.title = fixedBreakdownText(calc); kpis.appendChild(kf);
 kpis.appendChild(kpi('Costi variabili/mese', fmtEUR(calc.varSum),'','kpi-var', incTxt(calc.varSum, calc.revenue), 'kpi-var-sub'));
 kpis.appendChild(kpi('BEP mensile', fmtEUR(calc.bepMese),'','kpi-bep'));
@@ -2922,7 +2944,7 @@ document.getElementById('kpi-target').textContent = fmtEUR(c2.targetMese);
 var card0 = el('div','card');
 card0.appendChild(el('h2',null,'Parametri della sede: '+siteObj.name));
 var row0 = el('div','input-row');
-row0.appendChild(el('label',null,'Fatturato stimato mensile (&euro;)'));
+row0.appendChild(el('label',null,BASE()+' stimat'+(baseProd()?'a':'o')+' mensile (&euro;)'));
 row0.appendChild(bindMoneyNum({get:function(){return STATE.budget.revenue[si]||0;}, set:function(v){STATE.budget.revenue[si]=v;}},{rerender:true}));
 card0.appendChild(row0);
 var row1 = el('div','input-row');
@@ -2957,6 +2979,8 @@ totalSpan.textContent = fmtEUR(catTotal);
 var left = document.createElement('span');
 left.appendChild(document.createTextNode(cat.name+' '));
 left.appendChild(totalSpan);
+var incB = spanIncid(catTotal, calc.revenue); incB.style.float='none'; incB.style.marginLeft='8px'; incB.title='Incidenza sul '+baseTxt()+' stimato';
+left.appendChild(incB);
 var right = el('span','cat-actions');
 right.appendChild(renameBtn(function(){return cat.name;}, function(v){ cat.name=v; }, 'Rinomina macro-gruppo'));
 right.appendChild(deleteBtn('Eliminare il macro-gruppo "'+cat.name+'" e tutte le sue '+items.length+' voci? L\u2019operazione non si pu\u00f2 annullare.', function(){ removeFixedCat(cat.id); }));
@@ -2973,6 +2997,7 @@ else r.appendChild(bindEditableText({get:function(){return it.name;}, set:functi
 r.appendChild(bindMoneyNum({get:function(){return getBF(it.id,si);}, set:function(v){setBF(it.id,si,v);}}, {rerender:false, onChange:function(){
 var newTotal = sum(items.map(function(i2){return getBF(i2.id,si);}));
 totalSpan.textContent = fmtEUR(newTotal);
+incB.textContent = fmtIncid(newTotal, Number(STATE.budget.revenue[si])||0);
 refreshBudgetKPIs();
 }}));
 if(!scCat) r.appendChild(deleteBtn('Eliminare la voce "'+it.name+'"? Verranno persi anche i relativi dati di consuntivo.', function(){ removeFixedItem(it.id); }));
@@ -2998,8 +3023,8 @@ btnRow1.appendChild(addCatBtn); btnRow1.appendChild(refreshBtn);
 card1.appendChild(btnRow1);
 main.appendChild(card1);
 var card2 = el('div','card');
-card2.appendChild(el('h2',null,'Costi variabili (% sul fatturato di questa sede)'));
-card2.appendChild(el('div','help-tip','Ogni categoria \u00e8 calcolata come percentuale del fatturato stimato della sede selezionata.'));
+card2.appendChild(el('h2',null,'Costi variabili (% sul '+baseTxt()+' di questa sede)'));
+card2.appendChild(el('div','help-tip','Ogni categoria \u00e8 calcolata come percentuale del '+baseTxt()+' stimato della sede selezionata.'));
 STATE.varCats.forEach(function(c){
 var r = el('div','input-row item-row');
 r.appendChild(bindEditableText({get:function(){return c.name;}, set:function(v){c.name=v;}}, {cls:'item-name-input'}));
@@ -3033,7 +3058,7 @@ var cells = all.perSite.map(function(p){return '<td>'+fmt(fn(p))+'</td>';}).join
 return '<tr><td>'+label+'</td>'+cells+'<td><b>'+fmt(fn(all.tot))+'</b></td></tr>';
 }
 var body='';
-body += tblRow('Fatturato stimato', function(p){return p.revenue;}, fmtEUR);
+body += tblRow(BASE()+' stimat'+(baseProd()?'a':'o'), function(p){return p.revenue;}, fmtEUR);
 body += tblRow('Costi fissi/mese', function(p){return p.totFixedMese;}, fmtEUR);
 body += tblRow('Costi variabili/mese', function(p){return p.varSum;}, fmtEUR);
 body += tblRow('MDC', function(p){return p.mdc;}, fmtEUR);
@@ -3050,9 +3075,9 @@ var all = calcBudgetAll();
 var kpis = el('div','kpi-grid');
 kpis.className = 'kpi-grid sei';
 function kpi(label,value,cls,sub){ var k=el('div','kpi'); k.appendChild(el('div','label',label)); k.appendChild(el('div','value '+(cls||''),value)); if(sub) k.appendChild(el('div','sub',sub)); return k; }
-var T = all.tot, incT = function(v){ return T.revenue ? 'Incidenza sul fatturato '+fmtPct(v/T.revenue) : 'Incidenza: imposta il fatturato'; };
+var T = all.tot, incT = function(v){ return T.revenue ? 'Incidenza sul '+baseTxt()+' '+fmtPct(v/T.revenue) : 'Incidenza: imposta il '+baseTxt(); };
 var giornoT = safeDiv(T.bepMese, T.revenue)*30;
-kpis.appendChild(kpi('Fatturato stimato mensile', fmtEUR(T.revenue)));
+kpis.appendChild(kpi(BASE()+' stimat'+(baseProd()?'a':'o')+' mensile', fmtEUR(T.revenue)));
 kpis.appendChild(kpi('Costi fissi/mese', fmtEUR(T.totFixedMese), '', incT(T.totFixedMese)));
 kpis.appendChild(kpi('Costi variabili/mese', fmtEUR(T.varSum), '', incT(T.varSum)));
 kpis.appendChild(kpi('BEP mensile', fmtEUR(T.bepMese)));
@@ -3065,7 +3090,7 @@ STATE.fixedCats.forEach(function(cat){
 var items = STATE.fixedItems.filter(function(it){return it.catId===cat.id;});
 if(items.length===0) return;
 var catTotal = sum(items.map(function(it){return itemBudgetMonthly(it.id);}));
-var det = makeDetails('budgettot_cat_'+cat.id, cat.name+' <span style="float:right;color:var(--teal);">'+fmtEUR(catTotal)+'</span>');
+var det = makeDetails('budgettot_cat_'+cat.id, cat.name+' <span style="float:right;color:var(--teal);">'+fmtEUR(catTotal)+'</span><span class="incid" title="Incidenza sul '+baseTxt()+' stimato">'+fmtIncid(catTotal,T.revenue)+'</span>');
 var wrap = el('div','table-scroll');
 var table = document.createElement('table'); table.className='datatable';
 var head = '<tr><th>Voce</th>'+STATE.sites.map(function(s){return '<th>'+s.name+'</th>';}).join('')+'<th>Totale</th></tr>';
@@ -3145,7 +3170,7 @@ revArr[parseInt(inp.dataset.m,10)] = parseFloat(inp.value)||0;
 saveState();
 var el2 = document.getElementById('rowtot_rev_'+siteId);
 if(el2) el2.innerHTML = '<b>'+fmtEUR(sum(revArr))+'</b>';
-aggiornaIncidenze(sum(revArr));
+if(!baseProd()) aggiornaIncidenze(sum(revArr));
 });
 });
 main.appendChild(card0);
@@ -3167,6 +3192,7 @@ prodArr[parseInt(inp.dataset.m,10)] = parseFloat(inp.value)||0;
 saveState();
 var elp = document.getElementById('rowtot_prod_'+siteId);
 if(elp) elp.innerHTML = '<b>'+fmtEUR(sum(prodArr))+'</b>';
+if(baseProd()) aggiornaIncidenze(sum(prodArr));
 });
 });
 main.appendChild(cardProd);
@@ -3201,7 +3227,8 @@ var summary = document.createElement('summary');
 var catTotalSpan = document.createElement('span');
 catTotalSpan.style.float='right'; catTotalSpan.style.color='#2F8F9E';
 catTotalSpan.textContent = fmtEUR(catTotal);
-var incF = spanIncid(catTotal, sum(revArr)); incF.dataset.tot = catTotal;
+var baseArrC = function(){ return sum(baseProd() ? (STATE.consuntivo.produzione[siteId]||[]) : revArr); };
+var incF = spanIncid(catTotal, baseArrC()); incF.dataset.tot = catTotal;
 summary.appendChild(document.createTextNode(cat.name+' '));
 summary.appendChild(catTotalSpan);
 summary.appendChild(incF);
@@ -3240,7 +3267,7 @@ var rowTotEl = document.getElementById('rowtot_cf_'+siteId+'_'+iid);
 if(rowTotEl) rowTotEl.textContent = fmtEUR(sum(arr));
 var newCatTotal = sum(items.map(function(i2){ return sum(consArrFixed(i2.id,siteId)); }));
 catTotalSpan.textContent = fmtEUR(newCatTotal);
-incF.dataset.tot = newCatTotal; incF.textContent = fmtIncid(newCatTotal, sum(revArr));
+incF.dataset.tot = newCatTotal; incF.textContent = fmtIncid(newCatTotal, baseArrC());
 aggiornaRigaTotaleMacro(idTotF, mesiCatF());
 });
 });
@@ -3274,7 +3301,7 @@ var summary = document.createElement('summary');
 var catTotalSpan = document.createElement('span');
 catTotalSpan.style.float='right'; catTotalSpan.style.color='#2F8F9E';
 catTotalSpan.textContent = fmtEUR(catTotal);
-var incV = spanIncid(catTotal, sum(revArr)); incV.dataset.tot = catTotal;
+var incV = spanIncid(catTotal, sum(baseProd() ? (STATE.consuntivo.produzione[siteId]||[]) : revArr)); incV.dataset.tot = catTotal;
 summary.appendChild(document.createTextNode(c.name+' '));
 summary.appendChild(catTotalSpan);
 summary.appendChild(incV);
@@ -3282,7 +3309,7 @@ det.appendChild(summary);
 function refreshCatTotal(){
 var t=0; for(var mm=0;mm<12;mm++) t += consVarCatMonth(c.id,siteId,mm);
 catTotalSpan.textContent = fmtEUR(t);
-incV.dataset.tot = t; incV.textContent = fmtIncid(t, sum(revArr));
+incV.dataset.tot = t; incV.textContent = fmtIncid(t, sum(baseProd() ? (STATE.consuntivo.produzione[siteId]||[]) : revArr));
 }
 if(!catObj.suppliers.length){
 var wrap = el('div','table-scroll');
@@ -3416,12 +3443,13 @@ var mcList = el('div','help-tip', STATE.sites.map(function(s){ return s.name+': 
 mcCard.appendChild(mcList);
 main.appendChild(mcCard);
 var card2 = el('div','card');
+var baseTotC=0; for(var mb=0;mb<12;mb++) baseTotC+=baseMonthAll(mb);
 card2.appendChild(el('h2',null,'Costi fissi &mdash; totale importi reali per mese'));
 STATE.fixedCats.forEach(function(cat){
 var items = STATE.fixedItems.filter(function(it){return it.catId===cat.id;}).filter(function(it){return isFixedItemFilledAny(it.id);});
 if(items.length===0) return;
 var catTotal = sum(items.map(function(it){ var t=0; for(var m2=0;m2<12;m2++){ STATE.sites.forEach(function(s){ t+=consFixedMonth(it.id,s.id,m2); }); } return t; }));
-var det = makeDetails('cons_total_fixed_'+cat.id, cat.name+' <span style="float:right;color:#2F8F9E;">'+fmtEUR(catTotal)+'</span><span class="incid" title="Incidenza sul fatturato incassato caricato">'+fmtIncid(catTotal,totRev)+'</span>');
+var det = makeDetails('cons_total_fixed_'+cat.id, cat.name+' <span style="float:right;color:#2F8F9E;">'+fmtEUR(catTotal)+'</span><span class="incid" title="Incidenza sul '+(baseProd()?'valore della produzione':'fatturato incassato')+' caricato">'+fmtIncid(catTotal,baseTotC)+'</span>');
 var wrap = el('div','table-scroll');
 var table = document.createElement('table'); table.className='datatable';
 var head = '<tr><th>Voce</th>'+MONTHS_SHORT.map(function(mm){return '<th>'+mm+'</th>';}).join('')+'<th>Tot.</th></tr>';
@@ -3446,7 +3474,7 @@ card3.appendChild(el('h2',null,'Costi variabili &mdash; totale importi reali per
 STATE.varCats.forEach(function(c){
 if(!isVarCatFilledAny(c.id)) return;
 var catTotal=0; for(var m3=0;m3<12;m3++) catTotal += consVarTotalOfCatAllSites(c.id,m3);
-var det = makeDetails('cons_total_var_'+c.id, c.name+' <span style="float:right;color:#2F8F9E;">'+fmtEUR(catTotal)+'</span><span class="incid" title="Incidenza sul fatturato incassato caricato">'+fmtIncid(catTotal,totRev)+'</span>');
+var det = makeDetails('cons_total_var_'+c.id, c.name+' <span style="float:right;color:#2F8F9E;">'+fmtEUR(catTotal)+'</span><span class="incid" title="Incidenza sul '+(baseProd()?'valore della produzione':'fatturato incassato')+' caricato">'+fmtIncid(catTotal,baseTotC)+'</span>');
 var wrap = el('div','table-scroll');
 var table = document.createElement('table'); table.className='datatable';
 var head = '<tr><th>Voce</th>'+MONTHS_SHORT.map(function(mm){return '<th>'+mm+'</th>';}).join('')+'<th>Tot.</th></tr>';
@@ -3462,7 +3490,7 @@ main.appendChild(card3);
 // Riga in fondo a ogni macro-voce: somma per mese delle voci (quanto speso nella macro-voce in quel mese)
 // Incidenza della macro voce sul fatturato incassato caricato (nella riga del nome, in Consuntivo)
 function fmtIncid(costo, fatt){ if(!fatt || !costo) return ''; var p=costo/fatt*100; return p.toLocaleString('it-IT',{minimumFractionDigits:1,maximumFractionDigits:1})+'%'; }
-function spanIncid(costo, fatt){ var sp=document.createElement('span'); sp.className='incid'; sp.title='Incidenza sul fatturato incassato caricato'; sp.textContent=fmtIncid(costo,fatt); return sp; }
+function spanIncid(costo, fatt){ var sp=document.createElement('span'); sp.className='incid'; sp.title='Incidenza sul '+(baseProd()?'valore della produzione':'fatturato incassato')+' caricato'; sp.textContent=fmtIncid(costo,fatt); return sp; }
 function aggiornaIncidenze(fatt){ document.querySelectorAll('.incid[data-tot]').forEach(function(sp){ sp.textContent=fmtIncid(parseFloat(sp.dataset.tot)||0, fatt); }); }
 function rigaTotaleMacro(label, mesi, idBase, extraTd){
 var r='<tr class="total-row"><td style="text-align:left;white-space:nowrap;">Totale '+String(label).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</td>';
@@ -3518,7 +3546,7 @@ var s = currentScostSite==='TOTAL' ? scostamentiSummaryTotal() : scostamentiSumm
 var kpis = el('div','kpi-grid');
 function kpi(label,value,cls){ var k=el('div','kpi'); k.appendChild(el('div','label',label)); k.appendChild(el('div','value '+(cls||''),value)); return k; }
 if(s.mc!==null) kpis.appendChild(kpi('Mesi compilati', s.mc));
-kpis.appendChild(kpi('Fatturato proiezione annua', fmtEUR(s.fatturatoProiezione)));
+kpis.appendChild(kpi(BASE()+' proiezione annua', fmtEUR(s.fatturatoProiezione)));
 kpis.appendChild(kpi('Costi fissi: budget annuo', fmtEUR(s.totFixedBudgetAnno)));
 kpis.appendChild(kpi('Costi fissi: proiezione annua', fmtEUR(s.totFixedProiezione)));
 kpis.appendChild(kpi('Costi variabili: budget annuo', fmtEUR(s.totVarBudgetAnno)));
@@ -3572,21 +3600,21 @@ wrap2.appendChild(table2); card2.appendChild(wrap2);
 }
 main.appendChild(card2);
 var card3 = el('div','card');
-card3.appendChild(el('h2',null,'Andamento fatturato: budget vs reale per mese'));
+card3.appendChild(el('h2',null,'Andamento '+baseTxt()+': budget vs reale per mese'));
 var chartWrap = el('div','chart-wrap'); var cv=document.createElement('canvas'); chartWrap.appendChild(cv); card3.appendChild(chartWrap);
 main.appendChild(card3);
 setTimeout(function(){
 var realData, budgetConst;
 if(currentScostSite==='TOTAL'){
-realData = MONTHS.map(function(_,i){ return consRevenueMonthAll(i); });
+realData = MONTHS.map(function(_,i){ return baseMonthAll(i); });
 budgetConst = calcBudgetAll().tot.revenue;
 } else {
 var mcSite = mesiCompilati(currentScostSite);
-realData = MONTHS.map(function(_,i){ return i<mcSite ? consRevenueMonthSite(currentScostSite,i) : null; });
+realData = MONTHS.map(function(_,i){ return i<mcSite ? baseMonthSite(currentScostSite,i) : null; });
 budgetConst = calcBudgetSite(currentScostSite).revenue;
 }
 new Chart(cv,{type:'line',data:{labels:MONTHS_SHORT,datasets:[
-{label:'Fatturato reale', data:realData, borderColor:'#2F8F9E', backgroundColor:'#2F8F9E', tension:.25},
+{label:BASE()+' reale', data:realData, borderColor:'#2F8F9E', backgroundColor:'#2F8F9E', tension:.25},
 {label:'Budget mensile (costante)', data:MONTHS.map(function(){return budgetConst;}), borderColor:'#c0483f', borderDash:[6,4], tension:0}
 ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
 },0);
@@ -3987,7 +4015,7 @@ main.appendChild(el('p','pagesub','Sintesi aziendale mese per mese, calcolata au
 var ce = calcContoEconomico();
 var kpis = el('div','kpi-grid');
 function kpi(label,value,cls){ var k=el('div','kpi'); k.appendChild(el('div','label',label)); k.appendChild(el('div','value '+(cls||''),value)); return k; }
-kpis.appendChild(kpi('Fatturato totale', fmtEUR(ce.cumFatt)));
+kpis.appendChild(kpi(BASE()+' totale', fmtEUR(ce.cumFatt)));
 kpis.appendChild(kpi('Costi fissi totali', fmtEUR(ce.cumFissi)));
 kpis.appendChild(kpi('Costi variabili totali', fmtEUR(ce.cumVar)));
 kpis.appendChild(kpi('Risultato netto', fmtEUR(ce.cumRis), ce.cumRis>=0?'pos':'neg'));
@@ -4025,7 +4053,7 @@ main.appendChild(colCard);
 var card = el('div','card');
 var wrap = el('div','table-scroll');
 var table = document.createElement('table'); table.className='datatable';
-var head = '<tr><th>Mese</th><th>Fatturato</th><th>Costi fissi</th><th>Costi variabili</th><th>Risultato</th>'+STATE.ceColumns.map(function(col){return '<th>'+col.name.replace(/</g,'&lt;')+' ('+col.pct+'%)</th>';}).join('')+'</tr>';
+var head = '<tr><th>Mese</th><th>'+BASE()+'</th><th>Costi fissi</th><th>Costi variabili</th><th>Risultato</th>'+STATE.ceColumns.map(function(col){return '<th>'+col.name.replace(/</g,'&lt;')+' ('+col.pct+'%)</th>';}).join('')+'</tr>';
 var body='';
 ce.rows.forEach(function(r){
 body += '<tr><td>'+MONTHS[r.m]+'</td><td>'+fmtEUR(r.fatt)+'</td><td>'+fmtEUR(r.fissi)+'</td><td>'+fmtEUR(r.vari)+'</td><td class="'+(r.risultato>=0?'pos':'neg')+'">'+fmtEUR(r.risultato)+'</td>'+
