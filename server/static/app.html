@@ -2598,6 +2598,26 @@ s: (d.fatt ? fmtPct(d.utile/d.fatt)+' del'+(baseProd()?'la produzione':' fattura
 g1.appendChild(tile({ l:'Utile a fine anno <small>(stima)</small>', v:fmtEUR(d.utileP), vc: d.utileP>=0?'pos':'neg', c: d.utileP>=0?'var(--green)':'var(--red)', stima:true,
 s: d.haBudget ? ('Budget '+fmtEUR(d.budUtileAnno)+' '+dEuro(d.utileP, d.budUtileAnno, true)) : 'Al ritmo dei mesi compilati.' }));
 main.appendChild(g1);
+// Liquidità (saldi dei conti correnti in Statistiche storiche, dato di tutta l'azienda)
+var liq = (function(){
+  var y = STATE.currentYear, mesi = [];
+  for(var q=0;q<12;q++){ if(STATE.bankAccounts.some(function(a){ var yr=STATE.bankBalances[a.id]&&STATE.bankBalances[a.id][y]; return yr && yr[q]!==undefined && yr[q]!==null && yr[q]!=='' && Number(yr[q])!==0; })) mesi.push(q); }
+  if(!mesi.length) return null;
+  var ult = mesi[mesi.length-1], pri = mesi[0], val = bankTotalMonth(y, ult);
+  var o = { mese: ult, val: val, fine: null, media: null };
+  if(ult===11) o.fine = val;
+  else if(ult>pri){ o.media = (val - bankTotalMonth(y, pri))/(ult-pri); o.fine = val + o.media*(11-ult); }
+  return o;
+})();
+main.appendChild(el('div','cru-group','Liquidit\u00e0'+(siteId?' <span style="text-transform:none;letter-spacing:0;font-weight:600">&middot; tutta l\u2019azienda</span>':'')));
+var gL = el('div','cru-grid');
+gL.appendChild(tile({ l:'Liquidit\u00e0', v: liq ? fmtEUR(liq.val) : '&mdash;', vc: liq ? (liq.val>=0?'pos':'neg') : '', c:'#3f8f5c',
+s: liq ? ('Saldo dei conti a '+MONTHS[liq.mese]) : 'Inserisci i saldi dei conti in <b>Statistiche storiche</b>.',
+title:'Somma dei saldi dei conti correnti aziendali dell\u2019ultimo mese inserito' }));
+gL.appendChild(tile({ l:'Liquidit\u00e0 a fine anno <small>(stima)</small>', v: liq && liq.fine!==null ? fmtEUR(liq.fine) : '&mdash;', vc: liq && liq.fine!==null ? (liq.fine>=0?'pos':'neg') : '', c:'#3f8f5c', stima:true,
+s: !liq ? 'Servono i saldi dei conti in Statistiche storiche.' : liq.mese===11 ? 'Saldo di dicembre.' : liq.media===null ? 'Serve il saldo di almeno due mesi per stimare l\u2019andamento.' : ('Al ritmo di '+(liq.media>=0?'+':'')+fmtEUR(liq.media)+' al mese'),
+title:'Ultimo saldo pi\u00f9 la variazione media mensile dei saldi inseriti, fino a dicembre' }));
+main.appendChild(gL);
 main.appendChild(el('div','cru-group','Costi e margine <span style="text-transform:none;letter-spacing:0;font-weight:600">&middot; sul'+(baseProd()?'la produzione':' fatturato')+' a oggi</span>'));
 var g2 = el('div','cru-grid');
 g2.appendChild(tile({ l:'Incidenza costi fissi', v:fmtPct(d.incFissi), c:'var(--navy)',
