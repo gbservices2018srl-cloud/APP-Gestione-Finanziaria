@@ -172,7 +172,7 @@ tr.evid > td{background:#FFF3C4 !important;transition:background .4s}
 canvas{cursor:default}
 </style>
 <!-- dopo una modifica la pagina resta dov'era (comune a tutte le app To Smile) -->
-<script src="https://appgestione.it/static/resta-qui.js?v=3" defer></script>
+<script src="https://appgestione.it/static/resta-qui.js?v=4" defer></script>
 </head>
 <body>
 <div id="gate" class="gate" hidden></div>
@@ -612,8 +612,8 @@ function pCruscotto(S) {
     return `<div class="card" style="margin-top:18px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">${badge(b.r)}<div style="flex:1;min-width:220px"><div class="muted" style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em">Rating creditizio · ${esc(b.titolo)}</div>
       <div style="font-family:var(--font-brand);font-weight:700;color:var(--navy);font-size:17px;margin:2px 0 8px">${b.r.liv[0]} · ${b.r.liv[1].toLowerCase()} (${b.r.tot}/12)</div>${scala(b.r)}</div>${b.r.dscr != null ? `<div style="text-align:center;min-width:110px"><div class="muted" style="font-size:11px;font-weight:800;text-transform:uppercase">DSCR</div><div style="font-family:var(--font-brand);font-size:28px;font-weight:800;color:${fasciaDscr(b.r.dscr).c}">${nf2.format(b.r.dscr)}</div><div style="font-size:12px;font-weight:700;color:${fasciaDscr(b.r.dscr).c}">${fasciaDscr(b.r.dscr).l}</div></div>` : ''}<button class="btn small" data-pag="rating">Apri il rating</button></div>`; })()}
   <div class="charts" style="margin-top:18px">
-    <div class="card" style="margin:0"><h2>Punto di pareggio</h2><p class="muted" style="font-size:12.5px;margin:-4px 0 8px">Tocca una linea per vedere il valore; cliccala per aprire le voci da cui nasce.</p><div class="chartbox"><canvas id="chBep"></canvas></div></div>
-    <div class="card" style="margin:0"><h2>Dal fatturato all'utile</h2><p class="muted" style="font-size:12.5px;margin:-4px 0 8px">Tocca una barra per vedere il valore; cliccala per aprire le voci di quel gruppo.</p><div class="chartbox"><canvas id="chCascata"></canvas></div></div>
+    <div class="card" style="margin:0"><h2>Punto di pareggio</h2><p class="muted" style="font-size:12.5px;margin:-4px 0 8px">Clicca una linea per vedere i valori; clicca il riquadro per aprire le voci da cui nasce.</p><div class="chartbox"><canvas id="chBep"></canvas></div></div>
+    <div class="card" style="margin:0"><h2>Dal fatturato all'utile</h2><p class="muted" style="font-size:12.5px;margin:-4px 0 8px">Clicca una barra per vedere i valori; clicca il riquadro per aprire le voci di quel gruppo.</p><div class="chartbox"><canvas id="chCascata"></canvas></div></div>
   </div>
   <div class="card" style="margin-top:18px"><h2>Confronto</h2>${tabCE([
     S.base && { t: `Consuntivo ${D.base.anno}`, k: S.base, pct: true },
@@ -876,7 +876,7 @@ function puntatore(e, els, ch) { ch.canvas.style.cursor = els.length ? 'pointer'
 function disegnaGrafici(S) {
   if (PAGE !== 'cruscotto' || !window.Chart) return;
   const k = { consuntivo: S.cons, budget: S.budget, proiezione: S.pro }[SCEN]; if (!k) return;
-  Chart.defaults.font.family = "'Nunito Sans', sans-serif"; Chart.defaults.color = '#655a6b';
+  Chart.defaults.locale = 'it-IT'; Chart.defaults.font.family = "'Nunito Sans', sans-serif"; Chart.defaults.color = '#655a6b';
   const cb = $('#chBep');
   if (cb && k.fatt > 0) {
     const max = Math.max(k.fatt, isFinite(k.bep) ? k.bep : 0) * 1.25, vp = k.variabili / k.fatt;

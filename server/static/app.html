@@ -10,6 +10,7 @@
    per andare al dato di origine; i grafici delle pagine precedenti vengono chiusi. */
 if (window.Chart) {
   Chart.defaults.interaction = { mode: 'nearest', intersect: false, axis: 'x' };
+  Chart.defaults.locale = 'it-IT';
   Chart.overrides.doughnut.interaction = { mode: 'nearest', intersect: true };
   Chart.defaults.onHover = function (e, els, ch) { var c = ch && ch.canvas; if (c) c.style.cursor = (els.length && ch.options.onClick) ? 'pointer' : 'default'; };
   Chart.register({ id: 'tsPulizia', beforeInit: function () { Object.values(Chart.instances).forEach(function (x) { if (x.canvas && !x.canvas.isConnected) x.destroy(); }); } });
@@ -313,7 +314,7 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 .base-switch button.on{background:#2F8F9E;color:#fff}
 </style>
 <!-- dopo una modifica la pagina resta dov'era (comune a tutte le app To Smile) -->
-<script src="https://appgestione.it/static/resta-qui.js?v=3" defer></script>
+<script src="https://appgestione.it/static/resta-qui.js?v=4" defer></script>
 </head>
 <body>
 <button id="mobileMenuBtn" aria-label="Apri menu">&#9776;</button>
@@ -2747,35 +2748,35 @@ var mc = scost.mc;
 renderCruscotto(main, null);
 var two = el('div','two-col');
 var c1 = el('div','card'); c1.appendChild(el('h2',null,BASE()+' vs Costi &mdash; mese per mese'));
-c1.appendChild(el('div','help-tip','Clicca una colonna per aprire il Consuntivo mensile di quel mese.'));
+c1.appendChild(el('div','help-tip','Clicca una colonna per vedere i valori; clicca il riquadro per aprire quel mese nel Consuntivo mensile.'));
 var chart1 = el('div','chart-wrap'); var cv1=document.createElement('canvas'); chart1.appendChild(cv1); c1.appendChild(chart1);
 two.appendChild(c1);
 var c2 = el('div','card'); c2.appendChild(el('h2',null,'Composizione costi (proiezione annua)'));
-c2.appendChild(el('div','help-tip','Clicca una fetta per aprire Budget costi.'));
+c2.appendChild(el('div','help-tip','Clicca una fetta per vedere i valori; clicca il riquadro per aprire Budget costi.'));
 var chart2 = el('div','chart-wrap'); var cv2=document.createElement('canvas'); chart2.appendChild(cv2); c2.appendChild(chart2);
 two.appendChild(c2);
 main.appendChild(two);
 var c3 = el('div','card'); c3.appendChild(el('h2',null,'Budget annuo per sede (costi fissi)'));
-c3.appendChild(el('div','help-tip','Clicca una colonna per aprire Budget costi di quella sede.'));
+c3.appendChild(el('div','help-tip','Clicca una colonna per vedere i valori; clicca il riquadro per aprire Budget costi di quella sede.'));
 var chart3 = el('div','chart-wrap'); var cv3=document.createElement('canvas'); chart3.appendChild(cv3); c3.appendChild(chart3);
 main.appendChild(c3);
 main.appendChild(el('div','section-title','Andamento storico dell\u2019azienda'));
 var c3b = el('div','card'); c3b.appendChild(el('h2',null,'Fatturato e produzione, dalla nascita ad oggi'));
-c3b.appendChild(el('div','help-tip','Include automaticamente tutti gli anni chiusi con "Chiudi anno" (Backup dati), pi\u00f9 l\u2019anno corrente sempre aggiornato in tempo reale. Clicca un punto per aprire quel mese.'));
+c3b.appendChild(el('div','help-tip','Include automaticamente tutti gli anni chiusi con "Chiudi anno" (Backup dati), pi\u00f9 l\u2019anno corrente sempre aggiornato in tempo reale. Clicca un punto per vedere i valori; clicca il riquadro per aprire quel mese.'));
 var chart3b = el('div','chart-wrap'); chart3b.style.height='380px'; var cv3b=document.createElement('canvas'); chart3b.appendChild(cv3b); c3b.appendChild(chart3b);
 main.appendChild(c3b);
 var c3c = el('div','card'); c3c.appendChild(el('h2',null,'Liquidit\u00e0, dalla nascita ad oggi'));
-c3c.appendChild(el('div','help-tip','Somma dei saldi di tutti i conti correnti (Statistiche storiche), mese per mese, su tutti gli anni disponibili. Clicca un punto per aprire quel mese.'));
+c3c.appendChild(el('div','help-tip','Somma dei saldi di tutti i conti correnti (Statistiche storiche), mese per mese, su tutti gli anni disponibili. Clicca un punto per vedere i valori; clicca il riquadro per aprire quel mese.'));
 var chart3c = el('div','chart-wrap'); chart3c.style.height='380px'; var cv3c=document.createElement('canvas'); chart3c.appendChild(cv3c); c3c.appendChild(chart3c);
 main.appendChild(c3c);
 main.appendChild(el('div','section-title',BASE()));
 var c4 = el('div','card'); c4.appendChild(el('h2',null,'Andamento '+baseTxt()+' per sede'));
-c4.appendChild(el('div','help-tip','Clicca sui nomi nella legenda per nascondere/mostrare la linea di una sede. Clicca un punto per aprire quel mese in quella sede.'));
+c4.appendChild(el('div','help-tip','Clicca sui nomi nella legenda per nascondere/mostrare la linea di una sede. Clicca un punto per vedere i valori; clicca il riquadro per aprire quel mese in quella sede.'));
 var chart4 = el('div','chart-wrap'); chart4.style.height='380px'; var cv4=document.createElement('canvas'); chart4.appendChild(cv4); c4.appendChild(chart4);
 main.appendChild(c4);
 main.appendChild(el('div','section-title','Produzione'));
 var c5 = el('div','card'); c5.appendChild(el('h2',null,'Andamento produzione per sede'));
-c5.appendChild(el('div','help-tip','Clicca sui nomi nella legenda per nascondere/mostrare la linea di una sede. Clicca un punto per aprire quel mese in quella sede.'));
+c5.appendChild(el('div','help-tip','Clicca sui nomi nella legenda per nascondere/mostrare la linea di una sede. Clicca un punto per vedere i valori; clicca il riquadro per aprire quel mese in quella sede.'));
 var chart5 = el('div','chart-wrap'); chart5.style.height='380px'; var cv5=document.createElement('canvas'); chart5.appendChild(cv5); c5.appendChild(chart5);
 main.appendChild(c5);
 setTimeout(function(){
@@ -2830,22 +2831,22 @@ var risNetto = sum(fattArr)-sum(fissiArr)-sum(variArr);
 renderCruscotto(main, siteId);
 var two = el('div','two-col');
 var c1 = el('div','card'); c1.appendChild(el('h2',null,BASE()+' vs Costi &mdash; mese per mese'));
-c1.appendChild(el('div','help-tip','Clicca una colonna per aprire il Consuntivo mensile di quel mese, per questa sede.'));
+c1.appendChild(el('div','help-tip','Clicca una colonna per vedere i valori; clicca il riquadro per aprire quel mese nel Consuntivo mensile di questa sede.'));
 var chart1 = el('div','chart-wrap'); var cv1=document.createElement('canvas'); chart1.appendChild(cv1); c1.appendChild(chart1);
 two.appendChild(c1);
 var c2 = el('div','card'); c2.appendChild(el('h2',null,'Composizione costi (proiezione annua)'));
-c2.appendChild(el('div','help-tip','Clicca una fetta per aprire Budget costi di questa sede.'));
+c2.appendChild(el('div','help-tip','Clicca una fetta per vedere i valori; clicca il riquadro per aprire Budget costi di questa sede.'));
 var chart2 = el('div','chart-wrap'); var cv2=document.createElement('canvas'); chart2.appendChild(cv2); c2.appendChild(chart2);
 two.appendChild(c2);
 main.appendChild(two);
 main.appendChild(el('div','section-title',BASE()));
 var c4 = el('div','card'); c4.appendChild(el('h2',null,'Andamento '+baseTxt()));
-c4.appendChild(el('div','help-tip','Clicca un punto per aprire quel mese nel Consuntivo mensile.'));
+c4.appendChild(el('div','help-tip','Clicca un punto per vedere i valori; clicca il riquadro per aprire quel mese nel Consuntivo mensile.'));
 var chart4 = el('div','chart-wrap'); chart4.style.height='320px'; var cv4=document.createElement('canvas'); chart4.appendChild(cv4); c4.appendChild(chart4);
 main.appendChild(c4);
 main.appendChild(el('div','section-title','Produzione'));
 var c5 = el('div','card'); c5.appendChild(el('h2',null,'Andamento produzione'));
-c5.appendChild(el('div','help-tip','Clicca un punto per aprire quel mese nel Consuntivo mensile.'));
+c5.appendChild(el('div','help-tip','Clicca un punto per vedere i valori; clicca il riquadro per aprire quel mese nel Consuntivo mensile.'));
 var chart5 = el('div','chart-wrap'); chart5.style.height='320px'; var cv5=document.createElement('canvas'); chart5.appendChild(cv5); c5.appendChild(chart5);
 main.appendChild(c5);
 setTimeout(function(){
@@ -3775,7 +3776,7 @@ wrap2.appendChild(table2); card2.appendChild(wrap2);
 main.appendChild(card2);
 var card3 = el('div','card');
 card3.appendChild(el('h2',null,'Andamento '+baseTxt()+': budget vs reale per mese'));
-card3.appendChild(el('div','help-tip','Tocca un punto per vedere il valore; cliccalo per aprire quel mese nel consuntivo (la linea del budget apre il budget).'));
+card3.appendChild(el('div','help-tip','Clicca un punto per vedere i valori; clicca il riquadro per aprire quel mese nel consuntivo (dalla linea del budget si apre il budget).'));
 var chartWrap = el('div','chart-wrap'); var cv=document.createElement('canvas'); chartWrap.appendChild(cv); card3.appendChild(chartWrap);
 main.appendChild(card3);
 setTimeout(function(){
@@ -4244,7 +4245,7 @@ wrap.appendChild(table); card.appendChild(wrap);
 main.appendChild(card);
 var card2 = el('div','card');
 card2.appendChild(el('h2',null,'Andamento risultato mensile'));
-card2.appendChild(el('div','help-tip','Tocca una barra per vedere il valore; cliccala per aprire quel mese nel consuntivo.'));
+card2.appendChild(el('div','help-tip','Clicca una barra per vedere i valori; clicca il riquadro per aprire quel mese nel consuntivo.'));
 var cw = el('div','chart-wrap'); var cv=document.createElement('canvas'); cw.appendChild(cv); card2.appendChild(cw);
 main.appendChild(card2);
 setTimeout(function(){
