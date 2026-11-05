@@ -168,6 +168,8 @@ table.dt input:focus,table.dt select:focus{outline:2px solid var(--teal);border-
   #main{padding:18px 14px 60px}
 }
 @media print{#sidebar,.noprint,.btn{display:none!important}#main{padding:0}.card,.cru{break-inside:avoid}.table-scroll{max-height:none;overflow:visible}body{background:#fff}}
+tr.evid > td{background:#FFF3C4 !important;transition:background .4s}
+canvas{cursor:default}
 </style>
 <!-- dopo una modifica la pagina resta dov'era (comune a tutte le app To Smile) -->
 <script src="https://appgestione.it/static/resta-qui.js?v=3" defer></script>
@@ -610,8 +612,8 @@ function pCruscotto(S) {
     return `<div class="card" style="margin-top:18px;display:flex;align-items:center;gap:18px;flex-wrap:wrap">${badge(b.r)}<div style="flex:1;min-width:220px"><div class="muted" style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em">Rating creditizio · ${esc(b.titolo)}</div>
       <div style="font-family:var(--font-brand);font-weight:700;color:var(--navy);font-size:17px;margin:2px 0 8px">${b.r.liv[0]} · ${b.r.liv[1].toLowerCase()} (${b.r.tot}/12)</div>${scala(b.r)}</div>${b.r.dscr != null ? `<div style="text-align:center;min-width:110px"><div class="muted" style="font-size:11px;font-weight:800;text-transform:uppercase">DSCR</div><div style="font-family:var(--font-brand);font-size:28px;font-weight:800;color:${fasciaDscr(b.r.dscr).c}">${nf2.format(b.r.dscr)}</div><div style="font-size:12px;font-weight:700;color:${fasciaDscr(b.r.dscr).c}">${fasciaDscr(b.r.dscr).l}</div></div>` : ''}<button class="btn small" data-pag="rating">Apri il rating</button></div>`; })()}
   <div class="charts" style="margin-top:18px">
-    <div class="card" style="margin:0"><h2>Punto di pareggio</h2><div class="chartbox"><canvas id="chBep"></canvas></div></div>
-    <div class="card" style="margin:0"><h2>Dal fatturato all'utile</h2><div class="chartbox"><canvas id="chCascata"></canvas></div></div>
+    <div class="card" style="margin:0"><h2>Punto di pareggio</h2><p class="muted" style="font-size:12.5px;margin:-4px 0 8px">Tocca una linea per vedere il valore; cliccala per aprire le voci da cui nasce.</p><div class="chartbox"><canvas id="chBep"></canvas></div></div>
+    <div class="card" style="margin:0"><h2>Dal fatturato all'utile</h2><p class="muted" style="font-size:12.5px;margin:-4px 0 8px">Tocca una barra per vedere il valore; cliccala per aprire le voci di quel gruppo.</p><div class="chartbox"><canvas id="chCascata"></canvas></div></div>
   </div>
   <div class="card" style="margin-top:18px"><h2>Confronto</h2>${tabCE([
     S.base && { t: `Consuntivo ${D.base.anno}`, k: S.base, pct: true },
@@ -632,7 +634,7 @@ function perArea(lista, riga, totale) {
   let h = '';
   for (const a of AREE) {
     const vs = lista.filter(v => v.area === a.k); if (!vs.length) continue;
-    h += `<tr class="area"><td colspan="99">${a.l}</td></tr>` + vs.map(riga).join('') + (totale ? totale(a, vs) : '');
+    h += `<tr class="area" data-ar="${a.k}"><td colspan="99">${a.l}</td></tr>` + vs.map(riga).join('') + (totale ? totale(a, vs) : '');
   }
   return h;
 }
@@ -852,6 +854,25 @@ function dscrBox(b) {
 const punti = n => `<span class="rt-dots" title="${n} su 3">${[1, 2, 3].map(i => `<i class="${i <= n ? (n === 3 ? 'g' : n === 2 ? 'y' : 'r') : ''}"></i>`).join('')}</span>`;
 
 /* ---------- grafici ---------- */
+/* Dal grafico al dato: apre la pagina dello scenario mostrato e porta alle voci da cui nasce il valore. */
+function vaiAlDato(aree, filtro) {
+  PAGE = SCEN === 'budget' ? 'budget' : SCEN === 'proiezione' ? 'scostamenti' : 'consuntivo';
+  if (filtro) FILT.r = filtro;
+  window.scrollTo(0, 0); render();
+  setTimeout(() => {
+    let primo = null;
+    for (const a of [].concat(aree || [])) {
+      const tr = document.querySelector(`#main tr.area[data-ar="${a}"]`); if (!tr) continue;
+      if (!primo) primo = tr;
+      let r = tr; const righe = [];
+      do { righe.push(r); r = r.nextElementSibling; } while (r && !r.classList.contains('area'));
+      righe.forEach(x => x.classList.add('evid')); setTimeout(() => righe.forEach(x => x.classList.remove('evid')), 2600);
+    }
+    const dove = primo || (aree === 'ce' ? [...document.querySelectorAll('#main .card h2')].find(h => /Conto economico/.test(h.textContent)) : null);
+    if (dove) dove.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 60);
+}
+function puntatore(e, els, ch) { ch.canvas.style.cursor = els.length ? 'pointer' : 'default'; }
 function disegnaGrafici(S) {
   if (PAGE !== 'cruscotto' || !window.Chart) return;
   const k = { consuntivo: S.cons, budget: S.budget, proiezione: S.pro }[SCEN]; if (!k) return;
@@ -869,6 +890,12 @@ function disegnaGrafici(S) {
     ds.push({ label: 'Fatturato attuale', data: [{ x: k.fatt, y: 0 }, { x: k.fatt, y: Math.max(k.fatt, k.fissi + vp * k.fatt) }], borderColor: 'rgba(36,26,41,.35)', borderWidth: 1.5, borderDash: [3, 4], pointRadius: 0 });
     CHARTS.push(new Chart(cb, { type: 'scatter', data: { datasets: ds.map(d => ({ showLine: true, fill: false, tension: 0, ...d })) },
       options: { responsive: true, maintainAspectRatio: false, animation: { duration: 500 },
+        interaction: { mode: 'nearest', intersect: false }, onHover: puntatore,
+        onClick: (e, els) => { if (!els.length) return; const l = ds[els[0].datasetIndex].label;
+          if (l === 'Costi fissi') vaiAlDato(AREE.filter(a => a.natura).map(a => a.k), 'F');
+          else if (l === 'Costi totali') vaiAlDato(AREE.filter(a => a.natura).map(a => a.k), 'tutte');
+          else if (l === 'Pareggio') vaiAlDato('ce');
+          else vaiAlDato('ricavi', 'tutte'); },
         plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true } }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ${eurS(c.parsed.y)} (fatturato ${eurS(c.parsed.x)})` } } },
         scales: { x: { type: 'linear', min: 0, max, title: { display: true, text: 'Fatturato' }, ticks: { callback: v => eurS(v) }, grid: { color: '#f0edf1' } },
           y: { min: 0, ticks: { callback: v => eurS(v) }, grid: { color: '#f0edf1' } } } } }));
@@ -884,7 +911,13 @@ function disegnaGrafici(S) {
       else { data.push([cur, cur + v]); cur += v; col.push(v >= 0 ? '#7fb6bf' : '#d9a39c'); }
     }
     CHARTS.push(new Chart(cc, { type: 'bar', data: { labels: passi.map(p => p[0]), datasets: [{ data, backgroundColor: col, borderRadius: 5, borderSkipped: false }] },
-      options: { responsive: true, maintainAspectRatio: false, animation: { duration: 500 }, plugins: { legend: { display: false },
+      options: { responsive: true, maintainAspectRatio: false, animation: { duration: 500 },
+        interaction: { mode: 'index', intersect: false }, onHover: puntatore,
+        onClick: (e, els) => { if (!els.length) return; const mappa = { Fatturato: 'ricavi', Materie: ['rimIn', 'acquisti', 'rimFin'], Produttivi: 'produttivi', Personale: 'personale',
+            Commerciali: 'commerciali', Amministrativi: 'amministrativi', Tributari: 'tributari', EBITDA: 'ce', Ammortamenti: 'ammortamenti', Finanziari: ['finanziari', 'provFin'],
+            Extra: ['altriRic', 'extra'], Imposte: 'imposte', Utile: 'ce' };
+          vaiAlDato(mappa[passi[els[0].index][0]], 'tutte'); },
+        plugins: { legend: { display: false },
         tooltip: { callbacks: { label: c => { const p = passi[c.dataIndex]; return `${p[0]}: ${eur(p[1])}${k.fatt ? ' (' + pct(p[1] / k.fatt) + ')' : ''}`; } } } },
         scales: { y: { ticks: { callback: v => eurS(v) }, grid: { color: '#f0edf1' } }, x: { grid: { display: false }, ticks: { maxRotation: 50, autoSkip: false, font: { size: 11 } } } } } }));
   }
