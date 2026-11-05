@@ -289,6 +289,12 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 .powered-by{padding:14px 18px 4px; display:flex; align-items:center; gap:8px; border-top:1px solid rgba(255,255,255,.14);}
 .powered-by span{font-size:10px; opacity:.55; text-transform:uppercase; letter-spacing:.04em;}
 .powered-by img{height:20px; width:auto; opacity:.85;}
+.dir-box .dir-sedi{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.dir-box .dir-sedi label{display:flex;align-items:center;gap:6px;background:#F6F3F8;border:1px solid #E4DCEA;border-radius:10px;padding:6px 10px;font-size:14px;cursor:pointer}
+.dir-box .dir-sedi input[type=number]{width:62px;padding:3px 5px}
+.dir-box .dir-on{display:flex;align-items:center;gap:8px;font-weight:600;cursor:pointer}
+.dir-box .dir-somma{font-size:13px;margin-top:2px}
+.dir-box .dir-somma.ko{color:#B3261E;font-weight:700}
 .incid{float:right;margin-left:12px;margin-right:4px;font-size:12px;font-weight:700;color:#6E4C7B;background:#F1EAF4;border-radius:99px;padding:1px 9px;line-height:1.6}
 .incid:empty{display:none}
 .base-switch{display:inline-flex;align-items:center;gap:4px;margin:2px 0 14px;padding:3px;border:1px solid #dfe4e6;border-radius:999px;background:#fff;font-size:12.5px}
@@ -1219,12 +1225,13 @@ function calcBudgetSite(siteId){
 var fixedSum = 0;
 STATE.fixedItems.forEach(function(it){ fixedSum += getBF(it.id, siteId); });
 var amm = fixedSum * (Number(STATE.budget.ammPct[siteId])||0);
-var totFixedMese = fixedSum + amm;
+var dirB = dirBudget(siteId);
+var totFixedMese = (fixedSum + amm)*dirB.resto + dirB.inn;
 var revenue = Number(STATE.budget.revenue[siteId])||0;
 var varDetail = {}; var varSum = 0;
 STATE.varCats.forEach(function(c){
 var pct = getBV(c.id, siteId);
-var v = revenue * pct;
+var v = revenue * pct * dirB.resto;
 varDetail[c.id] = v; varSum += v;
 });
 var mdc = revenue - varSum;
@@ -1237,7 +1244,7 @@ var dataBepAnnuo = pctBepAnnuo * 365;
 var guadagnoPct = Number(STATE.budget.guadagnoPct[siteId])||0;
 var targetMese = bepMese * (1+guadagnoPct);
 var incFissiBudget = safeDiv(totFixedMese, revenue);
-return { fixedSum:fixedSum, amm:amm, totFixedMese:totFixedMese, revenue:revenue,
+return { fixedSum:fixedSum, amm:amm, dirIn:dirB.inn, dirResto:dirB.resto, totFixedMese:totFixedMese, revenue:revenue,
 varDetail:varDetail, varSum:varSum, mdc:mdc, mdcPct:mdcPct, bepMese:bepMese,
 giornoBep:giornoBep, bepAnnuo:bepAnnuo, pctBepAnnuo:pctBepAnnuo, dataBepAnnuo:dataBepAnnuo, targetMese:targetMese, incFissiBudget:incFissiBudget };
 }
@@ -1280,10 +1287,51 @@ if(!cat) return 0;
 if(cat.suppliers && cat.suppliers.length) return sum(cat.suppliers.map(function(s){return Number(s.values[m])||0;}));
 return Number(cat.total[m])||0;
 }
-function consFixedTotalMonthSite(siteId,m){ var t=0; STATE.fixedItems.forEach(function(it){ t+=consFixedMonth(it.id,siteId,m); }); return t; }
-function consVarTotalMonthSite(siteId,m){ var t=0; STATE.varCats.forEach(function(c){ t+=consVarCatMonth(c.id,siteId,m); }); return t; }
-function consFixedTotalMonthAll(m){ var t=0; STATE.sites.forEach(function(s){ t+=consFixedTotalMonthSite(s.id,m); }); return t; }
-function consVarTotalMonthAll(m){ var t=0; STATE.sites.forEach(function(s){ t+=consVarTotalMonthSite(s.id,m); }); return t; }
+function consFixedRawMonthSite(siteId,m){ var t=0; STATE.fixedItems.forEach(function(it){ t+=consFixedMonth(it.id,siteId,m); }); return t; }
+function consVarRawMonthSite(siteId,m){ var t=0; STATE.varCats.forEach(function(c){ t+=consVarCatMonth(c.id,siteId,m); }); return t; }
+/* Sede direzionale: i suoi costi vengono ripartiti sulle sedi scelte. Calcolo solo in visualizzazione, nessun dato viene spostato. */
+function DIR(){
+var d = STATE && STATE.direzione; if(!d || !d.sedeId || !findSite(d.sedeId)) return null;
+var sedi = (d.sedi||[]).filter(function(id){ return id!==d.sedeId && findSite(id); });
+if(!sedi.length) return null;
+return { sedeId:d.sedeId, criterio:d.criterio||'base', sedi:sedi, quote:d.quote||{} };
+}
+function dirPesi(D, baseFn){
+var w={}, tot=0;
+if(D.criterio==='fisse'){
+D.sedi.forEach(function(id){ var v=Math.max(0,Number(D.quote[id])||0)/100; w[id]=v; tot+=v; });
+if(tot>1){ for(var k in w) w[k]/=tot; }
+return w;
+}
+if(D.criterio==='base'){
+D.sedi.forEach(function(id){ var v=Math.max(0,Number(baseFn(id))||0); w[id]=v; tot+=v; });
+if(tot>0){ for(var k2 in w) w[k2]/=tot; return w; }
+}
+D.sedi.forEach(function(id){ w[id]=1/D.sedi.length; });
+return w;
+}
+function dirResto(w){ var t=0; for(var k in w) t+=w[k]; return Math.max(0, 1-t); }
+function dirPesiMese(D,m){ return dirPesi(D, function(id){ return baseMonthSite(id,m); }); }
+function dirCostoMese(D,m){ return consFixedRawMonthSite(D.sedeId,m)+consVarRawMonthSite(D.sedeId,m); }
+function dirInMese(siteId,m){ var D=DIR(); if(!D || siteId===D.sedeId) return 0; var w=dirPesiMese(D,m); return w[siteId] ? w[siteId]*dirCostoMese(D,m) : 0; }
+function dirRestoMese(siteId,m){ var D=DIR(); if(!D || siteId!==D.sedeId) return 1; return dirResto(dirPesiMese(D,m)); }
+function consFixedTotalMonthSite(siteId,m){ return consFixedRawMonthSite(siteId,m)*dirRestoMese(siteId,m) + dirInMese(siteId,m); }
+function consVarTotalMonthSite(siteId,m){ return consVarRawMonthSite(siteId,m)*dirRestoMese(siteId,m); }
+function consFixedTotalMonthAll(m){ var t=0; STATE.sites.forEach(function(s){ t+=consFixedRawMonthSite(s.id,m); }); return t; }
+function consVarTotalMonthAll(m){ var t=0; STATE.sites.forEach(function(s){ t+=consVarRawMonthSite(s.id,m); }); return t; }
+function budgetCostoRawSite(siteId){
+var f=0; STATE.fixedItems.forEach(function(it){ f+=getBF(it.id, siteId); });
+f += f*(Number(STATE.budget.ammPct[siteId])||0);
+var r=Number(STATE.budget.revenue[siteId])||0, v=0;
+STATE.varCats.forEach(function(c){ v+=r*getBV(c.id, siteId); });
+return f+v;
+}
+function dirBudget(siteId){
+var D=DIR(); if(!D) return {inn:0, resto:1};
+var w = dirPesi(D, function(id){ return Number(STATE.budget.revenue[id])||0; });
+if(siteId===D.sedeId) return {inn:0, resto:dirResto(w)};
+return {inn:(w[siteId]||0)*budgetCostoRawSite(D.sedeId), resto:1, quota:w[siteId]||0};
+}
 function consRevenueMonthSite(siteId,m){ var arr = STATE.consuntivo.revenue[siteId]; return arr?(Number(arr[m])||0):0; }
 function consRevenueMonthAll(m){ var t=0; STATE.sites.forEach(function(s){ t+=consRevenueMonthSite(s.id,m); }); return t; }
 function consProduzioneMonthSite(siteId,m){ var arr = STATE.consuntivo.produzione[siteId]; return arr?(Number(arr[m])||0):0; }
@@ -1327,6 +1375,14 @@ if(has) n=m+1;
 }
 return n;
 }
+function scostamentoDir(siteId, mc){
+var D=DIR(); if(!D || siteId===D.sedeId || D.sedi.indexOf(siteId)<0) return null;
+var budgetMese = dirBudget(siteId).inn, budgetAnno = budgetMese*12;
+var ytd=0; for(var m=0;m<mc;m++) ytd+=dirInMese(siteId,m);
+if(!budgetMese && !ytd) return null;
+var proiezione = mc>0?(ytd/mc*12):0;
+return {dir:true, item:{id:'__dir', name:'Costi di direzione (da '+findSite(D.sedeId).name+')'}, budgetAnno:budgetAnno, budgetMese:budgetMese, ytd:ytd, ancoraDisp:budgetAnno-ytd, proiezione:proiezione, scostamento:budgetAnno-proiezione};
+}
 function scostamentoItem(itemId,siteId){
 var mc = mesiCompilati(siteId);
 var budgetAnno = itemBudgetAnnualSite(itemId,siteId);
@@ -1351,6 +1407,7 @@ function scostamentiSummarySite(siteId){
 var mc = mesiCompilati(siteId);
 var fixedRows = STATE.fixedItems.filter(function(it){return itemVisibleForSite(it,siteId) && isFixedItemFilledSite(it.id, siteId);}).map(function(it){ return Object.assign({item:it}, scostamentoItem(it.id,siteId)); });
 var varRows = STATE.varCats.filter(function(c){return isVarCatFilledSite(c.id, siteId);}).map(function(c){ return Object.assign({cat:c}, scostamentoVarCat(c.id,siteId)); });
+var dirRow = scostamentoDir(siteId, mc); if(dirRow) fixedRows.push(dirRow);
 var totFixedBudgetAnno = sum(fixedRows.map(function(r){return r.budgetAnno;}));
 var totFixedProiezione = sum(fixedRows.map(function(r){return r.proiezione;}));
 var totVarBudgetAnno = sum(varRows.map(function(r){return r.budgetAnno;}));
@@ -2948,7 +3005,7 @@ var v=el('div','value '+(cls||''),value); if(id) v.id=id; k.appendChild(v);
 if(sub!==undefined){ var s=el('div','sub',sub); if(subId) s.id=subId; k.appendChild(s); }
 return k;
 }
-function fixedBreakdownText(c){ return 'voci '+fmtEUR(c.fixedSum)+' + amm.to suppletivi '+fmtEUR(c.amm)+' ('+fmtPct(Number(STATE.budget.ammPct[si])||0)+')'; }
+function fixedBreakdownText(c){ return 'voci '+fmtEUR(c.fixedSum)+' + amm.to suppletivi '+fmtEUR(c.amm)+' ('+fmtPct(Number(STATE.budget.ammPct[si])||0)+')'+(c.dirIn?' + costi di direzione '+fmtEUR(c.dirIn):'')+(c.dirResto<1?' — ripartiti sulle altre sedi: '+fmtPct(1-c.dirResto):''); }
 kpis.className = 'kpi-grid sei';
 function incTxt(v, r){ return r ? 'Incidenza sul '+baseTxt()+' '+fmtPct(v/r) : 'Incidenza: imposta il '+baseTxt(); }
 kpis.appendChild(kpi(BASE()+' stimat'+(baseProd()?'a':'o')+' mensile', fmtEUR(calc.revenue),'', 'kpi-revenue'));
@@ -3071,8 +3128,87 @@ addVarCat(name, false); render();
 };
 card2.appendChild(addVarBtn);
 main.appendChild(card2);
+boxDirezione(main, si, 'budget');
 renderConfrontoSedi(main);
 };
+function boxDirezione(main, siteId, modo){
+var cfg = STATE.direzione || null;
+var isDir = !!(cfg && cfg.sedeId===siteId);
+var D = DIR();
+var altre = STATE.sites.filter(function(x){ return x.id!==siteId; });
+if(!altre.length) return;
+var card = el('div','card dir-box');
+if(!isDir){
+if(D && D.sedi.indexOf(siteId)>=0){
+var nomeDir = findSite(D.sedeId).name;
+card.appendChild(el('h2',null,'Costi di direzione (da '+nomeDir+')'));
+card.appendChild(el('div','help-tip','Quota dei costi della sede direzionale assegnata a questa sede. È già compresa nei costi fissi: utile, incidenze, BEP e scostamenti ne tengono conto. Si imposta dalla sede '+nomeDir+'.'));
+if(modo==='budget'){
+var b = dirBudget(siteId);
+card.appendChild(el('div',null,'Quota: <b>'+fmtPct(b.quota)+'</b> &middot; '+fmtEUR(b.inn)+' al mese &middot; '+fmtEUR(b.inn*12)+' all’anno'));
+} else {
+var w = el('div','table-scroll'), t = document.createElement('table'); t.className='datatable';
+var q='<td>Quota</td>', e='<td>Costi di direzione</td>', tot=0;
+for(var m=0;m<12;m++){ var pw=dirPesiMese(D,m)[siteId]||0, v=dirInMese(siteId,m); tot+=v; q+='<td>'+(dirCostoMese(D,m)?fmtPct(pw):'')+'</td>'; e+='<td>'+(v?fmtEUR(v):'')+'</td>'; }
+t.innerHTML='<thead><tr><th>Voce</th>'+MONTHS_SHORT.map(function(x){return '<th>'+x+'</th>';}).join('')+'<th>Totale</th></tr></thead><tbody><tr>'+q+'<td></td></tr><tr class="total-row">'+e+'<td><b>'+fmtEUR(tot)+'</b></td></tr></tbody>';
+w.appendChild(t); card.appendChild(w);
+}
+main.appendChild(card); return;
+}
+if(cfg && cfg.sedeId && findSite(cfg.sedeId)) return;
+}
+card.appendChild(el('h2',null,'Sede direzionale'));
+var on = el('label','dir-on','<input type="checkbox"'+(isDir?' checked':'')+'> Questa è una sede direzionale: ripartisci i suoi costi sulle altre sedi');
+on.querySelector('input').onchange = function(){
+if(this.checked){ var c = STATE.direzione || {}; c.sedeId = siteId; if(!c.criterio) c.criterio='base'; if(!c.sedi) c.sedi = altre.map(function(x){return x.id;}); if(!c.quote) c.quote={}; STATE.direzione = c; }
+else if(STATE.direzione){ delete STATE.direzione.sedeId; }
+saveState(); render();
+};
+card.appendChild(on);
+if(!isDir){ main.appendChild(card); return; }
+card.appendChild(el('div','help-tip','I costi di questa sede vengono divisi tra le sedi scelte e compaiono da loro come “Costi di direzione”. Il totale azienda non cambia e nessun dato inserito viene spostato: togliendo la spunta torna tutto come prima.'));
+var crit = cfg.criterio||'base';
+var sw = el('div','base-switch');
+sw.innerHTML = '<span>Dividi</span><button type="button" data-c="base" class="'+(crit==='base'?'on':'')+'">In base al '+(baseProd()?'valore della produzione':'fatturato')+'</button><button type="button" data-c="fisse" class="'+(crit==='fisse'?'on':'')+'">Percentuali fisse</button><button type="button" data-c="uguali" class="'+(crit==='uguali'?'on':'')+'">Parti uguali</button>';
+sw.querySelectorAll('button').forEach(function(bt){ bt.onclick=function(){ cfg.criterio=bt.dataset.c; saveState(); render(); }; });
+card.appendChild(sw);
+card.appendChild(el('div','help-tip',crit==='base' ? 'Ogni mese la quota segue il '+baseTxt()+' delle sedi scelte (cambia con il tasto Incassato/Produzione). Se in un mese nessuna ha dati, si divide in parti uguali.' : crit==='fisse' ? 'Scrivi la percentuale di ogni sede. Se il totale è sotto il 100%, il resto rimane sulla sede direzionale.' : 'Ogni sede scelta riceve la stessa quota.'));
+var box = el('div','dir-sedi'), sommaEl = el('div','dir-somma');
+function somma(){ var t=0; (cfg.sedi||[]).forEach(function(id){ t+=Number((cfg.quote||{})[id])||0; }); sommaEl.textContent='Totale percentuali: '+fmtNum(t,2)+'%'+(t>100?' — supera il 100%: verranno riproporzionate':''); sommaEl.className='dir-somma'+(Math.abs(t-100)>0.001?' ko':''); }
+altre.forEach(function(x){
+var sel = (cfg.sedi||[]).indexOf(x.id)>=0;
+var lb = el('label');
+lb.innerHTML = '<input type="checkbox"'+(sel?' checked':'')+'> '+x.name+(crit==='fisse'&&sel ? ' <input type="number" min="0" max="100" step="0.5" value="'+(Number((cfg.quote||{})[x.id])||'')+'"> %' : '');
+lb.querySelector('input[type=checkbox]').onchange=function(){
+cfg.sedi = (cfg.sedi||[]).filter(function(id){return id!==x.id;}); if(this.checked) cfg.sedi.push(x.id); saveState(); render();
+};
+var n = lb.querySelector('input[type=number]');
+if(n){ n.onclick=function(ev){ ev.preventDefault(); n.focus(); }; n.oninput=function(){ cfg.quote = cfg.quote||{}; cfg.quote[x.id]=parseFloat(n.value)||0; saveState(); somma(); }; n.onchange=function(){ render(); }; }
+box.appendChild(lb);
+});
+card.appendChild(box);
+if(crit==='fisse') { somma(); card.appendChild(sommaEl); }
+if(!D){ card.appendChild(el('div','notebox','Scegli almeno una sede su cui ripartire i costi.')); main.appendChild(card); return; }
+if(modo==='budget'){
+var costo = budgetCostoRawSite(siteId), righe='';
+D.sedi.forEach(function(id){ var b=dirBudget(id); righe+='<tr><td>'+findSite(id).name+'</td><td>'+fmtPct(b.quota)+'</td><td>'+fmtEUR(b.inn)+'</td><td>'+fmtEUR(b.inn*12)+'</td></tr>'; });
+var rb = dirBudget(siteId).resto;
+if(rb>0.0001) righe+='<tr><td>Resta sulla sede direzionale</td><td>'+fmtPct(rb)+'</td><td>'+fmtEUR(costo*rb)+'</td><td>'+fmtEUR(costo*rb*12)+'</td></tr>';
+var w2=el('div','table-scroll'), t2=document.createElement('table'); t2.className='datatable';
+t2.innerHTML='<thead><tr><th>Sede</th><th>Quota</th><th>Al mese</th><th>All’anno</th></tr></thead><tbody>'+righe+'<tr class="total-row"><td>Costi della sede direzionale</td><td>100%</td><td>'+fmtEUR(costo)+'</td><td>'+fmtEUR(costo*12)+'</td></tr></tbody>';
+w2.appendChild(t2); card.appendChild(w2);
+} else {
+var head='<tr><th>Sede</th>'+MONTHS_SHORT.map(function(x){return '<th>'+x+'</th>';}).join('')+'<th>Totale</th></tr>', body='', tc=0, cm=[];
+for(var m2=0;m2<12;m2++){ cm.push(dirCostoMese(D,m2)); tc+=cm[m2]; }
+D.sedi.forEach(function(id){ var r='<td>'+findSite(id).name+'</td>', t=0; for(var m3=0;m3<12;m3++){ var v=dirInMese(id,m3); t+=v; r+='<td>'+(v?fmtEUR(v):'')+'</td>'; } body+='<tr>'+r+'<td><b>'+fmtEUR(t)+'</b></td></tr>'; });
+var rr='<td>Resta qui</td>', trr=0; for(var m4=0;m4<12;m4++){ var v4=cm[m4]*dirRestoMese(siteId,m4); trr+=v4; rr+='<td>'+(v4?fmtEUR(v4):'')+'</td>'; }
+if(trr>0.005) body+='<tr>'+rr+'<td><b>'+fmtEUR(trr)+'</b></td></tr>';
+body+='<tr class="total-row"><td>Costi della sede</td>'+cm.map(function(v){return '<td>'+(v?fmtEUR(v):'')+'</td>';}).join('')+'<td><b>'+fmtEUR(tc)+'</b></td></tr>';
+var w3=el('div','table-scroll'), t3=document.createElement('table'); t3.className='datatable';
+t3.innerHTML='<thead>'+head+'</thead><tbody>'+body+'</tbody>'; w3.appendChild(t3); card.appendChild(w3);
+}
+main.appendChild(card);
+}
 function renderConfrontoSedi(main){
 var card3 = el('div','card');
 card3.appendChild(el('h2',null,'Confronto tutte le sedi'));
@@ -3437,6 +3573,7 @@ det.appendChild(mg);
 card3.appendChild(det);
 });
 main.appendChild(card3);
+boxDirezione(main, siteId, 'consuntivo');
 }
 function renderConsuntivoTotale(main){
 main.appendChild(el('div','notebox','Vista di sola lettura: somma di tutte le sedi. Per modificare i valori, apri la scheda della singola sede.'));
@@ -3599,10 +3736,10 @@ var table = document.createElement('table'); table.className='datatable';
 var head = '<tr><th>Voce</th><th>Budget mese</th><th>Budget anno</th><th>Budget ancora disponibile</th><th>Proiezione annua</th><th>Scostamento</th></tr>';
 var body=''; var lastCat=null;
 s.fixedRows.forEach(function(r){
-var catObj = findFixedCat(r.item.catId);
+var catObj = r.dir ? {name:'Sede direzionale'} : findFixedCat(r.item.catId);
 var catName = catObj ? catObj.name : '(senza categoria)';
 if(catName!==lastCat){ body+='<tr class="cat-row"><td colspan="6">'+catName+'</td></tr>'; lastCat=catName; }
-body += '<tr><td>'+(currentScostSite==='TOTAL' ? itemLabel(r.item) : r.item.name)+'</td><td>'+fmtEUR(r.budgetMese)+'</td><td>'+fmtEUR(r.budgetAnno)+'</td><td>'+fmtEUR(r.ancoraDisp)+'</td><td>'+fmtEUR(r.proiezione)+'</td><td>'+scostBadge(r.scostamento)+'</td></tr>';
+body += '<tr><td>'+(currentScostSite==='TOTAL' && !r.dir ? itemLabel(r.item) : r.item.name)+'</td><td>'+fmtEUR(r.budgetMese)+'</td><td>'+fmtEUR(r.budgetAnno)+'</td><td>'+fmtEUR(r.ancoraDisp)+'</td><td>'+fmtEUR(r.proiezione)+'</td><td>'+scostBadge(r.scostamento)+'</td></tr>';
 });
 body += '<tr class="total-row"><td>TOTALE COSTI FISSI</td><td>'+fmtEUR(sum(s.fixedRows.map(function(r){return r.budgetMese;})))+'</td><td>'+fmtEUR(s.totFixedBudgetAnno)+'</td><td>'+fmtEUR(sum(s.fixedRows.map(function(r){return r.ancoraDisp;})))+'</td><td>'+fmtEUR(s.totFixedProiezione)+'</td><td>'+scostBadge(s.totFixedBudgetAnno-s.totFixedProiezione)+'</td></tr>';
 table.innerHTML = '<thead>'+head+'</thead><tbody>'+body+'</tbody>';
