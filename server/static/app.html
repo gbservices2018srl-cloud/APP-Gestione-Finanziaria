@@ -282,6 +282,30 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 .download-btn{background:var(--purple); color:#fff; border:none; padding:8px 16px; border-radius:7px; font-size:12.8px; cursor:pointer; font-weight:700; font-family:var(--font-brand); display:inline-flex; align-items:center; gap:6px; margin-bottom:16px;}
 .download-btn:hover{filter:brightness(1.08);}
 
+
+/* copia per il PDF */
+.pdf-print{font-size:11px; color:#1d1d1f;}
+.pdf-print *{box-shadow:none !important; animation:none !important; transition:none !important;}
+.pdf-print h1, .pdf-print .pagetitle{font-size:18px !important; margin:0 0 6px !important;}
+.pdf-print h2{font-size:13px !important; margin:0 0 6px !important;}
+.pdf-print .card{padding:10px 12px !important; margin:0 0 10px !important; border:1px solid #d9d9de !important; border-radius:8px !important; break-inside:auto;}
+.pdf-print .table-scroll{overflow:visible !important; max-height:none !important;}
+.pdf-print table{width:100% !important; font-size:10px; border-collapse:collapse;}
+.pdf-print table th, .pdf-print table td{padding:3px 5px !important; white-space:nowrap; line-height:1.3 !important;}
+.pdf-print table td:first-child, .pdf-print table th:first-child{white-space:normal; min-width:120px;}
+.pdf-print thead th{position:static !important;}
+.pdf-print .pdf-val{display:inline; font-weight:600;}
+.pdf-print td .pdf-val{display:block; text-align:right; font-weight:400;}
+.pdf-print td .money-cell{display:block;}
+.pdf-print .money-cell .pdf-val{padding-right:12px;}
+.pdf-print .money-cell::after{right:0; font-size:9px;}
+.pdf-print .kpi-grid{grid-template-columns:repeat(4, 1fr) !important; gap:8px !important;}
+.pdf-print .kpi{padding:8px 10px !important;}
+.pdf-print .kpi .value, .pdf-print .kpi-value{font-size:17px !important;}
+.pdf-print .pdf-chart{display:block; max-width:100%; max-height:230px; margin:0 auto; object-fit:contain;}
+.pdf-print .chart-wrap, .pdf-print .chart-box{height:auto !important;}
+.pdf-print .incid{font-size:9px !important;}
+@page{size:A4 landscape; margin:8mm;}
 @media print{
   #sidebar, .status-banner, .btn-row, .download-btn-wrap, .tabs, .site-selector, .modal-overlay{ display:none !important; }
   #app{display:block !important;}
@@ -2333,6 +2357,91 @@ if(cls) e.className = cls;
 if(html!==undefined) e.innerHTML = html;
 return e;
 }
+/* PDF ottimizzato per la stampa: A4 orizzontale, caratteri più piccoli, tabelle intere nella pagina,
+   valori delle caselle scritti come testo, grafici come immagini, niente pulsanti e spiegazioni. */
+var PDF_LARGHEZZA = 1062; // larghezza utile di un A4 orizzontale con margini di 8 mm
+function copiaPerStampa(target){
+var nascondi = el('div'); nascondi.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;overflow:hidden;z-index:-1';
+var box = el('div','pdf-print');
+box.style.cssText = 'position:absolute;left:0;top:0;width:'+PDF_LARGHEZZA+'px;background:#fff';
+nascondi.appendChild(box);
+var copia = target.cloneNode(true);
+copia.removeAttribute('id');
+// valori delle caselle (il clone non copia ciò che è stato scritto)
+var orig = target.querySelectorAll('input, select, textarea'), cl = copia.querySelectorAll('input, select, textarea');
+cl.forEach(function(c, i){
+var o = orig[i], t = '';
+if(!o) return;
+if(o.type === 'checkbox' || o.type === 'radio'){ t = o.checked ? '☑' : '☐'; }
+else if(o.tagName === 'SELECT'){ t = o.options[o.selectedIndex] ? o.options[o.selectedIndex].text : ''; }
+else if(o.type === 'number'){ var n = parseFloat(o.value); t = isNaN(n) ? '' : n.toLocaleString('it-IT', {maximumFractionDigits: 2}); }
+else { t = o.value; }
+if(o.type === 'hidden' || o.type === 'file' || o.type === 'button' || o.type === 'submit'){ c.remove(); return; }
+var sp = el('span','pdf-val'); sp.textContent = t;
+if(!c.closest('td,th') && o.offsetWidth){ var ocs = getComputedStyle(o); sp.style.display = 'inline-block'; sp.style.width = Math.min(o.offsetWidth, PDF_LARGHEZZA - 40) + 'px'; sp.style.textAlign = ocs.textAlign === 'start' ? 'left' : ocs.textAlign; sp.style.fontWeight = ocs.fontWeight; }
+c.replaceWith(sp);
+});
+// grafici: il clone ha i canvas vuoti, li sostituisco con l'immagine
+var oc = target.querySelectorAll('canvas'), cc = copia.querySelectorAll('canvas');
+cc.forEach(function(c, i){
+try { var img = new Image(); img.src = oc[i].toDataURL('image/png'); img.className = 'pdf-chart'; c.replaceWith(img); } catch(e){ c.remove(); }
+});
+copia.querySelectorAll('details').forEach(function(d){ d.open = true; });
+copia.querySelectorAll('button, .download-btn-wrap, .btn-row, .help-tip, .base-switch, .modal-overlay, .no-print, [data-ts-home]').forEach(function(x){ x.remove(); });
+// riquadri rimasti vuoti dopo aver tolto i pulsanti
+copia.querySelectorAll('.card').forEach(function(c){
+var t = c.textContent; c.querySelectorAll('h2,h3').forEach(function(h){ t = t.replace(h.textContent,''); });
+if(!t.replace(/[\s\u2610\u2611\u25be\u25b8]/g,'') && !c.querySelector('img,table')) c.remove();
+});
+box.appendChild(copia);
+document.body.appendChild(nascondi);
+var attese = Array.prototype.map.call(copia.querySelectorAll('img'), function(im){ return im.decode ? im.decode().catch(function(){}) : Promise.resolve(); });
+return Promise.all(attese).then(function(){ sistemaStampa(copia); impagina(box); return box; });
+}
+function sistemaStampa(copia){
+// tabelle troppo larghe: rimpicciolisco i caratteri finché stanno nella pagina
+copia.querySelectorAll('table').forEach(function(t){
+var disp = t.parentElement.clientWidth || PDF_LARGHEZZA, fs = 10;
+while(t.scrollWidth > disp + 1 && fs > 6.5){ fs -= 0.5; t.style.fontSize = fs + 'px'; }
+});
+// blocchi da non spezzare tra due pagine: righe di riquadri, grafici, riquadri piccoli
+// (mai i singoli elementi di una griglia, altrimenti lo spazio aggiunto la scombina)
+copia.querySelectorAll('*').forEach(function(x){
+var p = x.parentElement; if(!p || /^(TR|TD|TH|TBODY|THEAD|TABLE|SPAN|B|I|STRONG|SMALL)$/.test(x.tagName)) return;
+var pd = getComputedStyle(p).display; if(pd === 'grid' || pd === 'flex' || pd === 'inline-grid' || pd === 'inline-flex') return;
+var d = getComputedStyle(x).display, h = x.offsetHeight;
+if(h > 24 && h < 480 && (d === 'grid' || d === 'flex' || x.tagName === 'IMG' || /(^|\s)(card|kpi|chart-wrap)(\s|$)/.test(x.className))) x.classList.add('pdf-avoid');
+});
+}
+// Impagina a mano (più preciso dei salti automatici): se un blocco o una riga finisce a cavallo di due pagine,
+// lo porto all'inizio della pagina successiva. I titoli restano attaccati a quello che segue.
+var PDF_ALTEZZA_PAGINA = PDF_LARGHEZZA * (210 - 18) / (297 - 16);
+function impagina(box){
+var copia = box.firstChild;
+// titolo + blocco successivo = un unico pezzo
+copia.querySelectorAll('h2, h3, .section-title').forEach(function(h){
+var n = h.nextElementSibling; if(!n || h.closest('table')) return;
+if(h.offsetHeight + n.offsetHeight < PDF_ALTEZZA_PAGINA * 0.6){ h.setAttribute('data-pdf-con', '1'); }
+});
+var lista = Array.prototype.slice.call(copia.querySelectorAll('.pdf-avoid, tr, h2, h3, .section-title, h1'));
+var base = box.getBoundingClientRect().top;
+lista.forEach(function(x){
+if(!x.isConnected || !x.offsetHeight) return;
+if(x.parentElement && x.parentElement.closest('.pdf-avoid') && x.tagName !== 'TR') return; // già dentro un blocco tenuto insieme
+var r = x.getBoundingClientRect(), top = r.top - base, alto = r.height;
+if(x.getAttribute('data-pdf-con') && x.nextElementSibling) alto = x.nextElementSibling.getBoundingClientRect().bottom - r.top;
+if(alto >= PDF_ALTEZZA_PAGINA - 4) return;
+var fine = (Math.floor(top / PDF_ALTEZZA_PAGINA) + 1) * PDF_ALTEZZA_PAGINA;
+if(top + alto <= fine - 2) return;
+var spazio = fine - top + 4;
+if(x.tagName === 'TR'){
+var tr = document.createElement('tr'), td = document.createElement('td'); td.colSpan = 99; td.style.cssText = 'height:'+spazio+'px;padding:0 !important;border:none !important;background:#fff';
+tr.appendChild(td); x.parentNode.insertBefore(tr, x);
+} else {
+var sp = document.createElement('div'); sp.style.height = spazio + 'px'; x.parentNode.insertBefore(sp, x);
+}
+});
+}
 function makeDownloadButton(fileBaseName){
 var wrap = el('div','download-btn-wrap','');
 var btn = el('button','download-btn','&#11015;&#65039; Scarica PDF');
@@ -2345,25 +2454,26 @@ return;
 }
 var newTab = window.open('', '_blank');
 var target = document.getElementById('main');
-btn.disabled = true; btn.innerHTML = 'Genero il PDF\u2026';
-wrap.style.display = 'none';
-var scrollers = target.querySelectorAll('.table-scroll');
-var prevOverflow = [];
-scrollers.forEach(function(s,i){ prevOverflow[i]=s.style.overflow; s.style.overflow='visible'; });
-function restore(){
-scrollers.forEach(function(s,i){ s.style.overflow = prevOverflow[i]; });
-wrap.style.display=''; btn.disabled=false; btn.innerHTML=origLabel;
-}
+btn.disabled = true; btn.innerHTML = 'Genero il PDF…';
+var box = null;
+function restore(){ var n = box && box.parentNode; if(n && n.parentNode) n.parentNode.removeChild(n); btn.disabled=false; btn.innerHTML=origLabel; }
 var filename = (fileBaseName||'documento')+'_'+(new Date().toISOString().slice(0,10))+'.pdf';
 var opt = {
-margin: 8,
+margin: [8, 8, 10, 8],
 filename: filename,
 image: { type: 'jpeg', quality: 0.95 },
-html2canvas: { scale: 2, useCORS: true },
-jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-pagebreak: { mode: ['css','legacy'] }
+html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0 },
+jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+pagebreak: { mode: ['css'] }
 };
-html2pdf().set(opt).from(target).toPdf().get('pdf').then(function(pdf){
+copiaPerStampa(target).then(function(b){
+box = b;
+box.style.position = 'static'; // html2pdf ne fa una copia nella sua pagina: deve stare nel flusso normale
+return html2pdf().set(opt).from(box).toPdf().get('pdf');
+}).then(function(pdf){
+// numero di pagina in basso
+var n = pdf.internal.getNumberOfPages(), w = pdf.internal.pageSize.getWidth(), h = pdf.internal.pageSize.getHeight();
+for(var i=1;i<=n;i++){ pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(140); pdf.text('Pagina '+i+' di '+n, w-8, h-4, {align:'right'}); }
 var blobUrl = pdf.output('bloburl');
 if(newTab){
 newTab.location.href = blobUrl;
