@@ -189,6 +189,8 @@ table.datatable th:first-child{z-index:4;}
 .icon-btn{background:none; border:none; cursor:pointer; font-size:12px; padding:4px 5px; border-radius:5px; color:var(--text-soft);}
 .icon-btn:hover{background:rgba(0,0,0,.06); color:var(--red);}
 
+.budget-tot{display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-top:12px; padding:11px 14px; border-radius:10px; background:#eaf6f4; border:1px solid #cfe9e4; font-weight:700; color:var(--navy);}
+.budget-tot .v{font-size:16px; color:var(--teal);} .budget-tot small{font-weight:500; color:var(--text-soft); font-size:12px;}
 .cat-summary-row{display:flex; justify-content:space-between; align-items:center; gap:10px;}
 .cat-summary-row .cat-total{color:var(--teal); font-weight:600; margin-left:8px;}
 .cat-actions{display:flex; gap:2px; flex-shrink:0;}
@@ -3138,6 +3140,7 @@ kpis.appendChild(kpi('Target mensile (BEP + margine)', fmtEUR(calc.targetMese),'
 main.appendChild(kpis);
 function refreshBudgetKPIs(){
 var c2 = calcBudgetSite(si);
+if(window.__scriviTotFissi) window.__scriviTotFissi();
 document.getElementById('kpi-fixed').textContent = fmtEUR(c2.totFixedMese);
 document.getElementById('kpi-fixed-sub').textContent = incTxt(c2.totFixedMese, c2.revenue);
 document.getElementById('kpi-var').textContent = fmtEUR(c2.varSum);
@@ -3217,6 +3220,17 @@ det.appendChild(addItemBtn);
 }
 card1.appendChild(det);
 });
+var totFissiBox = el('div','budget-tot');
+function scriviTotFissi(){
+var c3 = calcBudgetSite(si), extra = [];
+if(c3.amm) extra.push('+ amm.to suppletivi '+fmtEUR(c3.amm));
+if(c3.dirIn) extra.push('+ costi di direzione '+fmtEUR(c3.dirIn));
+if(c3.dirResto<1) extra.push('ripartiti sulle altre sedi: '+fmtPct(1-c3.dirResto));
+totFissiBox.innerHTML = '<span>Totale costi fissi <small>(somma dei macro-gruppi'+(extra.length?' &middot; '+extra.join(' &middot; '):'')+')</small></span><span><span class="v">'+fmtEUR(c3.fixedSum)+'</span> <small>/mese</small> <span class="incid" style="float:none" title="Incidenza sul '+baseTxt()+' stimato">'+fmtIncid(c3.fixedSum, c3.revenue)+'</span></span>';
+}
+scriviTotFissi();
+card1.appendChild(totFissiBox);
+window.__scriviTotFissi = scriviTotFissi;
 var btnRow1 = el('div','btn-row');
 var addCatBtn = el('button','btn secondary','+ Nuovo macro-gruppo');
 addCatBtn.onclick = function(){
@@ -3240,6 +3254,10 @@ r.appendChild(amt);
 r.appendChild(deleteBtn('Eliminare la categoria variabile "'+c.name+'"?', function(){ removeVarCat(c.id); }));
 card2.appendChild(r);
 });
+var pctTot = 0; STATE.varCats.forEach(function(c){ pctTot += getBV(c.id,si)||0; });
+var totVarBox = el('div','budget-tot');
+totVarBox.innerHTML = '<span>Totale costi variabili <small>(somma delle percentuali)</small></span><span><span class="v">'+fmtPct(pctTot)+'</span> <small>del '+baseTxt()+' &rarr; '+fmtEUR(calc.varSum)+' /mese</small></span>';
+card2.appendChild(totVarBox);
 var addVarBtn = el('button','small-btn','+ aggiungi categoria variabile');
 addVarBtn.style.marginTop='8px';
 addVarBtn.onclick = function(){
@@ -3388,6 +3406,10 @@ table.innerHTML = '<thead>'+head+'</thead><tbody>'+body+'</tbody>';
 wrap.appendChild(table); det.appendChild(wrap);
 card1.appendChild(det);
 });
+var wrapTF = el('div','table-scroll'), tTF = document.createElement('table'); tTF.className='datatable';
+var fissiSede = STATE.sites.map(function(sx){ return calcBudgetSite(sx.id).fixedSum; });
+tTF.innerHTML = '<thead><tr><th></th>'+STATE.sites.map(function(sx){return '<th>'+sx.name+'</th>';}).join('')+'<th>Totale</th></tr></thead><tbody><tr class="total-row"><td>TOTALE COSTI FISSI /mese</td>'+fissiSede.map(function(v){return '<td>'+fmtEUR(v)+'</td>';}).join('')+'<td>'+fmtEUR(sum(fissiSede))+' <span class="incid" style="float:none">'+fmtIncid(sum(fissiSede),T.revenue)+'</span></td></tr></tbody>';
+wrapTF.style.marginTop='12px'; wrapTF.appendChild(tTF); card1.appendChild(wrapTF);
 main.appendChild(card1);
 var card2 = el('div','card');
 card2.appendChild(el('h2',null,'Costi variabili &mdash; totale tutte le sedi (mensile)'));
@@ -3400,6 +3422,10 @@ var rowTot=0; var cells='';
 STATE.sites.forEach(function(s){ var v=varCatBudgetMonthlySite(c.id,s.id); rowTot+=v; cells+='<td>'+fmtEUR(v)+'</td>'; });
 body2 += '<tr><td>'+c.name+'</td>'+cells+'<td>'+fmtEUR(rowTot)+'</td></tr>';
 });
+var varSede = STATE.sites.map(function(sx){ var t=0; STATE.varCats.forEach(function(c){ t+=varCatBudgetMonthlySite(c.id,sx.id); }); return t; });
+var pctSede = STATE.sites.map(function(sx){ var t=0; STATE.varCats.forEach(function(c){ t+=getBV(c.id,sx.id)||0; }); return t; });
+body2 += '<tr class="total-row"><td>TOTALE COSTI VARIABILI /mese</td>'+varSede.map(function(v){return '<td>'+fmtEUR(v)+'</td>';}).join('')+'<td>'+fmtEUR(sum(varSede))+'</td></tr>';
+body2 += '<tr class="total-row"><td>Somma delle percentuali</td>'+pctSede.map(function(v){return '<td>'+fmtPct(v)+'</td>';}).join('')+'<td title="Costi variabili totali sul '+baseTxt()+' totale">'+fmtPct(safeDiv(sum(varSede), T.revenue))+'</td></tr>';
 table2.innerHTML = '<thead>'+head2+'</thead><tbody>'+body2+'</tbody>';
 wrap2.appendChild(table2); card2.appendChild(wrap2);
 main.appendChild(card2);
