@@ -3594,6 +3594,7 @@ det.appendChild(addStaffBtn);
 }
 card2.appendChild(det);
 });
+var aggTotFissi = boxTotaliCons(card2, 'fissi', siteId);
 main.appendChild(card2);
 var card3 = el('div','card');
 card3.appendChild(el('h2',null,'Costi variabili &mdash; importi reali per mese'));
@@ -3719,7 +3720,12 @@ det.appendChild(mg);
 }
 card3.appendChild(det);
 });
+var aggTotVar = boxTotaliCons(card3, 'variabili', siteId);
 main.appendChild(card3);
+// i totali si aggiornano mentre si scrivono importi, fatturato o produzione
+[card0, cardProd, card2, card3].forEach(function(cd){
+cd.addEventListener('input', function(ev){ if(ev.target && ev.target.dataset && ev.target.dataset.m!==undefined){ aggTotFissi(); aggTotVar(); } });
+});
 boxDirezione(main, siteId, 'consuntivo');
 }
 function renderConsuntivoTotale(main){
@@ -3779,6 +3785,7 @@ table.innerHTML = '<thead>'+head+'</thead><tbody>'+body+'</tbody>';
 wrap.appendChild(table); det.appendChild(wrap);
 card2.appendChild(det);
 });
+boxTotaliCons(card2, 'fissi', 'TOTAL');
 main.appendChild(card2);
 var card3 = el('div','card');
 card3.appendChild(el('h2',null,'Costi variabili &mdash; totale importi reali per mese'));
@@ -3796,6 +3803,7 @@ table.innerHTML = '<thead>'+head+'</thead><tbody>'+body+'</tbody>';
 wrap.appendChild(table); det.appendChild(wrap);
 card3.appendChild(det);
 });
+boxTotaliCons(card3, 'variabili', 'TOTAL');
 main.appendChild(card3);
 }
 // Riga in fondo a ogni macro-voce: somma per mese delle voci (quanto speso nella macro-voce in quel mese)
@@ -3811,6 +3819,46 @@ return r+'<td'+(idBase?' id="'+idBase+'_tot"':'')+'>'+fmtEUR(sum(mesi))+'</td>'+
 function aggiornaRigaTotaleMacro(idBase, mesi){
 for(var i=0;i<12;i++){ var e=document.getElementById(idBase+'_'+i); if(e) e.textContent=fmtEUR(mesi[i]||0); }
 var t=document.getElementById(idBase+'_tot'); if(t) t.textContent=fmtEUR(sum(mesi));
+}
+// Totale costi fissi / variabili in fondo alle schede del Consuntivo (sede o totale azienda), come in Budget
+function boxTotaliCons(card, tipo, siteId){
+var tot = siteId==='TOTAL';
+var fisso = tipo==='fissi';
+var box = el('div','budget-tot');
+var wrap = el('div','table-scroll'); wrap.style.marginTop='8px';
+var table = document.createElement('table'); table.className='datatable';
+wrap.appendChild(table);
+function valMese(m){
+if(tot){ var t=0; STATE.sites.forEach(function(s){ t += fisso ? consFixedRawMonthSite(s.id,m) : consVarRawMonthSite(s.id,m); }); return t; }
+return fisso ? consFixedRawMonthSite(siteId,m) : consVarRawMonthSite(siteId,m);
+}
+function baseMese(m){ return tot ? baseMonthAll(m) : baseMonthSite(siteId,m); }
+function scrivi(){
+var mesi=[], basi=[];
+for(var m=0;m<12;m++){ mesi.push(valMese(m)); basi.push(baseMese(m)); }
+var T=sum(mesi), B=sum(basi), extra=[];
+if(!tot){
+var dIn=0, dOut=0;
+for(var q=0;q<12;q++){ dIn += fisso ? dirInMese(siteId,q) : 0; dOut += mesi[q]*(1-dirRestoMese(siteId,q)); }
+if(dIn) extra.push('+ costi di direzione ricevuti '+fmtEUR(dIn));
+if(dOut>0.005) extra.push('ripartiti sulle altre sedi: '+fmtEUR(dOut));
+}
+var etich = fisso ? 'Totale costi fissi <small>(somma dei macro-gruppi'+(extra.length?' &middot; '+extra.join(' &middot; '):'')+')</small>'
+: 'Totale costi variabili <small>(somma delle categorie'+(extra.length?' &middot; '+extra.join(' &middot; '):'')+')</small>';
+var valore = fisso
+? '<span class="v">'+fmtEUR(T)+'</span> <small>nell’anno</small> <span class="incid" style="float:none" title="Incidenza sul '+baseTxt()+' caricato">'+fmtIncid(T,B)+'</span>'
+: '<span class="v">'+(fmtIncid(T,B)||'&ndash;')+'</span> <small>del '+baseTxt()+' (somma delle percentuali) &rarr; '+fmtEUR(T)+' nell’anno</small>';
+box.innerHTML = '<span>'+etich+'</span><span>'+valore+'</span>';
+var nome = fisso ? 'TOTALE COSTI FISSI' : 'TOTALE COSTI VARIABILI';
+var h = '<thead><tr><th>Voce</th>'+MONTHS_SHORT.map(function(mm){return '<th>'+mm+'</th>';}).join('')+'<th>Tot.</th></tr></thead>';
+var r1 = '<tr class="total-row"><td style="text-align:left;white-space:nowrap;">'+nome+'</td>'+mesi.map(function(v){return '<td>'+fmtEUR(v)+'</td>';}).join('')+'<td>'+fmtEUR(T)+'</td></tr>';
+var r2 = '<tr><td style="text-align:left;white-space:nowrap;">% sul '+baseTxt()+'</td>'+mesi.map(function(v,i){return '<td>'+fmtIncid(v,basi[i])+'</td>';}).join('')+'<td>'+fmtIncid(T,B)+'</td></tr>';
+table.innerHTML = h+'<tbody>'+r1+r2+'</tbody>';
+}
+scrivi();
+card.appendChild(box);
+card.appendChild(wrap);
+return scrivi;
 }
 function consVarTotalOfCatAllSites(catId,m){ var t=0; STATE.sites.forEach(function(s){ t+=consVarCatMonth(catId,s.id,m); }); return t; }
 function consArrFixed(itemId,siteId){
