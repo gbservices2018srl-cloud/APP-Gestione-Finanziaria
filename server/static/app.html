@@ -2454,7 +2454,6 @@ if(typeof html2pdf === 'undefined'){
 flashStatus('Libreria PDF non disponibile (serve internet la prima volta). Riprova tra poco.');
 return;
 }
-var newTab = window.open('', '_blank');
 var target = document.getElementById('main');
 btn.disabled = true; btn.innerHTML = 'Genero il PDF…';
 var box = null;
@@ -2476,18 +2475,15 @@ return html2pdf().set(opt).from(box).toPdf().get('pdf');
 // numero di pagina in basso
 var n = pdf.internal.getNumberOfPages(), w = pdf.internal.pageSize.getWidth(), h = pdf.internal.pageSize.getHeight();
 for(var i=1;i<=n;i++){ pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(140); pdf.text('Pagina '+i+' di '+n, w-8, h-4, {align:'right'}); }
-var blobUrl = pdf.output('bloburl');
-if(newTab){
-newTab.location.href = blobUrl;
-flashStatus('PDF pronto in una nuova scheda: usa condividi/salva per tenerlo sul telefono.');
-} else {
-var a = document.createElement('a'); a.href = blobUrl; a.download = filename;
+// scaricamento diretto con il nome giusto (aprirlo in un'altra scheda faceva fallire il "Scarica" del browser)
+var blob = pdf.output('blob');
+var blobUrl = URL.createObjectURL(blob);
+var a = document.createElement('a'); a.href = blobUrl; a.download = filename; a.rel = 'noopener';
 document.body.appendChild(a); a.click(); document.body.removeChild(a);
-flashStatus('PDF scaricato');
-}
+setTimeout(function(){ URL.revokeObjectURL(blobUrl); }, 120000);
+flashStatus('PDF scaricato: '+filename);
 restore();
 }).catch(function(){
-if(newTab) newTab.close();
 restore();
 flashStatus('Non sono riuscito a generare il PDF. Riprova.');
 });
