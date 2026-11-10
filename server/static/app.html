@@ -338,6 +338,26 @@ details.cat-collapse[open] summary:before{content:'▾ '; }
 .base-switch span{padding:0 8px 0 10px;color:#5c6b72;font-weight:600}
 .base-switch button{border:0;background:none;padding:5px 12px;border-radius:999px;font-weight:700;color:#5c6b72;cursor:pointer;font-size:12.5px}
 .base-switch button.on{background:#2F8F9E;color:#fff}
+.inc-mini{position:relative;margin-top:4px;height:16px;border-radius:99px;background:#f1eef2;overflow:hidden;min-width:64px;font-size:10.5px;font-weight:700;line-height:16px;text-align:center;color:var(--text)}
+.inc-mini i{position:absolute;left:0;top:0;bottom:0;border-radius:99px;opacity:.35}
+.inc-mini span{position:relative}
+.inc-mini.vuota{background:none;color:var(--text-soft);font-weight:400}
+.inc-mini.mat i,.inc-bar .mat,.inc-leg i.mat{background:var(--teal)}
+.inc-mini.lab i,.inc-bar .lab,.inc-leg i.lab{background:var(--purple)}
+.inc-mini.med i,.inc-bar .med,.inc-leg i.med{background:var(--amber)}
+.inc-bar .fis,.inc-leg i.fis{background:#9b93a0}.inc-bar .mar,.inc-leg i.mar{background:var(--green)}.inc-bar .neg,.inc-leg i.neg{background:var(--red)}
+.inc-medie h2{margin-bottom:12px}
+.inc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.inc-tile{border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;border-top:4px solid var(--c,#9b93a0)}
+.inc-tile.mat{--c:var(--teal)}.inc-tile.lab{--c:var(--purple)}.inc-tile.med{--c:var(--amber)}.inc-tile.var{--c:var(--navy)}
+.inc-tile .label{font-size:12.5px;color:var(--text-soft);font-weight:700}.inc-tile .value{font-size:26px;font-weight:800;font-family:var(--font-brand);margin:2px 0}
+.inc-tile .sub{font-size:12px;color:var(--text-soft)}
+.inc-bar-tit{margin:16px 0 6px;font-size:12.5px;font-weight:700;color:var(--text-soft)}
+.inc-bar{display:flex;height:26px;border-radius:8px;overflow:hidden;background:#eee}
+.inc-bar span{display:flex;align-items:center;justify-content:center;color:#fff;font-size:11.5px;font-weight:700;min-width:0;overflow:hidden;white-space:nowrap}
+.inc-leg{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px;font-size:12.5px;color:var(--text-soft)}
+.inc-leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.sub-note{margin-top:10px;font-size:12px;color:var(--text-soft)}
 </style>
 <!-- dopo una modifica la pagina resta dov'era (comune a tutte le app To Smile) -->
 <script src="https://appgestione.it/static/resta-qui.js?v=6" defer></script>
@@ -1531,6 +1551,56 @@ var ovInt = ov*(Number(STATE.incassi.splitOVint[siteId])||0);
 var nc = ov*(Number(STATE.incassi.splitNC[siteId])||0);
 var splitTotal = (Number(STATE.incassi.splitPVest[siteId])||0)+(Number(STATE.incassi.splitPVint[siteId])||0)+(Number(STATE.incassi.splitOVint[siteId])||0)+(Number(STATE.incassi.splitNC[siteId])||0);
 return {target:target, ov:ov, pvEst:pvEst, pvInt:pvInt, ovInt:ovInt, nc:nc, splitTotal:splitTotal};
+}
+// incidenza di una voce sulla tariffa, in piccolo sotto il valore (materiali, laboratorio, medici)
+function incMini(valore, tariffa, tipo){
+var t = Number(tariffa)||0, v = Number(valore)||0;
+if(t<=0 || v<=0) return '<div class="inc-mini vuota">\u2014</div>';
+var p = v/t;
+return '<div class="inc-mini '+tipo+'" title="Incidenza sulla tariffa"><i style="width:'+Math.min(100, Math.round(p*100))+'%"></i><span>'+fmtPct(p)+'</span></div>';
+}
+// riquadro in fondo a Listini e margini: incidenza media di materiali, laboratorio e medici sulle tariffe
+function incidenzeMedie(righe, costoFissoUnitPct){
+var box = el('div','card inc-medie');
+box.appendChild(el('h2',null,'Incidenza media sulle tariffe'));
+var n = righe.length;
+if(!n){ box.appendChild(el('p','pagesub','Compila le tariffe del listino per vedere le incidenze medie.')); return box; }
+var voci = [
+{k:'mat', nome:'Materiali di consumo', val:function(r){ return Number(r.materiali)||0; }},
+{k:'lab', nome:'Laboratorio', val:function(r){ return Number(r.lab)||0; }},
+{k:'med', nome:'Medici e professionisti', val:function(r, c){ return c.costoProf||0; }}
+];
+var calcs = righe.map(function(r){ return calcListinoRow(r, costoFissoUnitPct); });
+var tot = 0, griglia = el('div','inc-grid');
+voci.forEach(function(v){
+var pcts = righe.map(function(r, i){ return v.val(r, calcs[i]) / r.tariffa; });
+var usate = pcts.filter(function(p){ return p > 0; });
+v.media = sum(pcts)/n; tot += v.media;
+var t = el('div','inc-tile '+v.k);
+t.appendChild(el('div','label', v.nome));
+t.appendChild(el('div','value', fmtPct(v.media)));
+t.appendChild(el('div','sub', usate.length ? (usate.length < n ? (usate.length === 1 ? 'nell\u2019unica prestazione che lo usa: ' : 'nelle '+usate.length+' prestazioni che lo usano: ')+fmtPct(sum(usate)/usate.length) : 'presente in tutte le prestazioni') : 'in nessuna prestazione'));
+griglia.appendChild(t);
+});
+var mFissi = sum(righe.map(function(r, i){ return calcs[i].costoFisso / r.tariffa; }))/n;
+var resto = 1 - tot - mFissi;
+var t2 = el('div','inc-tile var');
+t2.appendChild(el('div','label','Totale costi variabili'));
+t2.appendChild(el('div','value', fmtPct(tot)));
+t2.appendChild(el('div','sub','materiali + laboratorio + medici'));
+griglia.appendChild(t2);
+box.appendChild(griglia);
+// barra: come si divide in media 100 \u20ac di tariffa
+var seg = function(cls, p, nome){ return p > 0.004 ? '<span class="'+cls+'" style="flex:'+p+'" title="'+nome+': '+fmtPct(p)+'">'+(p >= 0.07 ? fmtPct(p) : '')+'</span>' : ''; };
+var barra = el('div','inc-bar');
+barra.innerHTML = seg('mat', voci[0].media, 'Materiali') + seg('lab', voci[1].media, 'Laboratorio') + seg('med', voci[2].media, 'Medici') + seg('fis', mFissi, 'Costi fissi') + seg(resto>=0?'mar':'neg', Math.abs(resto), resto>=0?'Margine':'Perdita');
+box.appendChild(el('div','inc-bar-tit','Come si divide in media 100 \u20ac di tariffa'));
+box.appendChild(barra);
+var leg = el('div','inc-leg');
+leg.innerHTML = '<span><i class="mat"></i>Materiali</span><span><i class="lab"></i>Laboratorio</span><span><i class="med"></i>Medici</span><span><i class="fis"></i>Costi fissi</span><span><i class="'+(resto>=0?'mar':'neg')+'"></i>'+(resto>=0?'Margine':'Perdita')+' '+fmtPct(resto)+'</span>';
+box.appendChild(leg);
+box.appendChild(el('div','sub-note','Media semplice su '+n+' prestazioni con tariffa (quelle a zero sono escluse), come il margine medio.'));
+return box;
 }
 function calcListinoRow(row, costoFissoUnitPct){
 // voce senza costo fisso (es. prestazioni adiuvanti a una terapia): non le si attribuisce quota di costi fissi
@@ -4349,12 +4419,12 @@ body += '<tr>'+
 '<td><input type="text" data-id="'+row.id+'" data-f="label" value="'+row.label.replace(/"/g,'&quot;')+'" style="width:220px;text-align:left;"/></td>'+
 '<td><span class="money-cell"><input type="number" data-id="'+row.id+'" data-f="tariffa" value="'+row.tariffa+'"/></span></td>'+
 '<td><input type="number" data-id="'+row.id+'" data-f="tempo" value="'+row.tempo+'"/></td>'+
-'<td><span class="money-cell"><input type="number" data-id="'+row.id+'" data-f="materiali" value="'+row.materiali+'"/></span></td>'+
-'<td><span class="money-cell"><input type="number" data-id="'+row.id+'" data-f="lab" value="'+row.lab+'"/></span></td>'+
+'<td><span class="money-cell"><input type="number" data-id="'+row.id+'" data-f="materiali" value="'+row.materiali+'"/></span>'+incMini(row.materiali, row.tariffa, 'mat')+'</td>'+
+'<td><span class="money-cell"><input type="number" data-id="'+row.id+'" data-f="lab" value="'+row.lab+'"/></span>'+incMini(row.lab, row.tariffa, 'lab')+'</td>'+
 '<td><input type="number" step="1" data-id="'+row.id+'" data-f="percProfPct" value="'+(row.percProf*100)+'"/></td>'+
 (row.percProf>0
-? '<td><span class="money-cell" title="Calcolato in automatico: (tariffa - lab) &times; % prof.">'+fmtEUR2(c.costoProf)+'</span></td>'
-: '<td><span class="money-cell"><input type="number" data-id="'+row.id+'" data-f="costoProf" value="'+row.costoProf+'"/></span></td>')+
+? '<td><span class="money-cell" title="Calcolato in automatico: (tariffa - lab) &times; % prof.">'+fmtEUR2(c.costoProf)+'</span>'+incMini(c.costoProf, row.tariffa, 'med')+'</td>'
+: '<td><span class="money-cell"><input type="number" data-id="'+row.id+'" data-f="costoProf" value="'+row.costoProf+'"/></span>'+incMini(c.costoProf, row.tariffa, 'med')+'</td>')+
 '<td style="text-align:center;"><input type="checkbox" data-nofissi="'+row.id+'" '+(row.senzaFissi?'':'checked')+' title="Applica il costo fisso a questa voce" style="width:auto;"/></td>'+
 '<td>'+(row.senzaFissi?'<span style="color:var(--text-soft);" title="Voce esclusa dai costi fissi">escluso</span>':fmtEUR2(c.costoFisso))+'</td><td>'+fmtEUR2(c.totVar)+'</td><td>'+fmtEUR2(c.costiTotali)+'</td>'+
 '<td>'+fmtEUR2(c.mdc)+'</td><td>'+fmtPct(c.mdcPct)+'</td><td>'+fmtEUR2(c.bepPrestazione)+'</td>'+
@@ -4364,6 +4434,7 @@ body += '<tr>'+
 table.innerHTML = '<thead>'+head+'</thead><tbody>'+body+'</tbody>';
 wrap.appendChild(table); card.appendChild(wrap);
 main.appendChild(card);
+main.appendChild(incidenzeMedie(conTariffa, costoFissoUnitPct));
 table.querySelectorAll('input[data-nofissi]').forEach(function(cb){
 cb.addEventListener('change', function(){
 var row = STATE.listino.find(function(r){return r.id===cb.dataset.nofissi;});
