@@ -4273,13 +4273,16 @@ manRow.appendChild(manInp);
 manRow.appendChild(el('span','help-tip','Se la compili, tutte le prestazioni usano questo valore; se la lasci vuota, si usa quello del Budget.'));
 incBox.appendChild(manRow);
 main.appendChild(incBox);
-var margini =STATE.listino.map(function(r){ return calcListinoRow(r, costoFissoUnitPct).margine; });
+// nella media contano solo le prestazioni con una tariffa: quelle a zero (voci vuote o non compilate) la falserebbero
+var conTariffa = STATE.listino.filter(function(r){ return (Number(r.tariffa)||0) > 0; });
+var escluse = STATE.listino.length - conTariffa.length;
+var margini = conTariffa.map(function(r){ return calcListinoRow(r, costoFissoUnitPct).margine; });
 var margineMedio = margini.length ? sum(margini)/margini.length : 0;
 var listinoKpis = el('div','kpi-grid');
 var mk = el('div','kpi');
 mk.appendChild(el('div','label','Margine medio prestazioni'));
 mk.appendChild(el('div','value '+(margineMedio>=0?'pos':'neg'), fmtPct(margineMedio)));
-mk.appendChild(el('div','sub', 'media su '+STATE.listino.length+' prestazioni a listino'));
+mk.appendChild(el('div','sub', 'media su '+conTariffa.length+' prestazioni a listino'+(escluse ? ' (escluse '+escluse+' a zero)' : '')));
 listinoKpis.appendChild(mk);
 main.appendChild(listinoKpis);
 var searchRow = el('div','input-row');
