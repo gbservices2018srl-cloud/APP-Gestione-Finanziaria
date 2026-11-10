@@ -131,6 +131,20 @@ def init_db():
         db.execute("ALTER TABLE companies ADD COLUMN billing_piva TEXT")
     if "billing_address" not in existing_cols:
         db.execute("ALTER TABLE companies ADD COLUMN billing_address TEXT")
+    # numero di versione dei dati: se due finestre salvano, la seconda viene avvisata invece di sovrascrivere
+    if "rev" not in existing_cols:
+        db.execute("ALTER TABLE companies ADD COLUMN rev INTEGER NOT NULL DEFAULT 0")
+    # storico delle versioni (compresso): si torna indietro per una sola azienda, senza toccare le altre
+    db.execute(
+        """CREATE TABLE IF NOT EXISTS company_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            company_id TEXT NOT NULL,
+            saved_at TEXT NOT NULL,
+            motivo TEXT NOT NULL DEFAULT '',
+            data BLOB NOT NULL
+        )"""
+    )
+    db.execute("CREATE INDEX IF NOT EXISTS company_versions_idx ON company_versions (company_id, saved_at)")
     db.execute(
         """CREATE TABLE IF NOT EXISTS password_reset_requests (
             id TEXT PRIMARY KEY,
@@ -710,6 +724,96 @@ def admin_resolve_reset_request(rid):
     return jsonify({"ok": True})
 
 
+# ---------------------------------------------------------------- storico delle versioni
+# A ogni salvataggio si tiene la versione precedente (al massimo una ogni 15 minuti per azienda).
+# Si conservano: tutte quelle degli ultimi 2 giorni, poi l'ultima di ogni giorno fino a 30 giorni.
+VERSIONE_OGNI_MIN = 15
+
+
+def _comprimi(testo):
+    import zlib
+    return zlib.compress(testo.encode("utf-8"), 6)
+
+
+def _decomprimi(blob):
+    import zlib
+    return zlib.decompress(blob).decode("utf-8")
+
+
+def salva_versione(db, company_id, data_text, motivo="", forza=False):
+    if not forza:
+        ultima = db.execute("SELECT saved_at FROM company_versions WHERE company_id=? ORDER BY id DESC LIMIT 1", (company_id,)).fetchone()
+        if ultima:
+            try:
+                t = datetime.datetime.fromisoformat(ultima["saved_at"].rstrip("Z"))
+                if datetime.datetime.utcnow() - t < datetime.timedelta(minutes=VERSIONE_OGNI_MIN):
+                    return
+            except Exception:
+                pass
+    db.execute("INSERT INTO company_versions (company_id, saved_at, motivo, data) VALUES (?,?,?,?)",
+               (company_id, now_iso(), motivo, _comprimi(data_text or "{}")))
+    limite30 = (datetime.datetime.utcnow() - datetime.timedelta(days=30)).isoformat() + "Z"
+    limite2 = (datetime.datetime.utcnow() - datetime.timedelta(days=2)).isoformat() + "Z"
+    db.execute("DELETE FROM company_versions WHERE company_id=? AND saved_at < ?", (company_id, limite30))
+    db.execute("""DELETE FROM company_versions WHERE company_id=? AND saved_at < ? AND id NOT IN (
+                    SELECT MAX(id) FROM company_versions WHERE company_id=? GROUP BY substr(saved_at, 1, 10))""",
+               (company_id, limite2, company_id))
+
+
+@app.route("/api/admin/companies/<cid>/versions", methods=["GET"])
+def admin_company_versions(cid):
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    db = get_db()
+    rows = db.execute("SELECT id, saved_at, motivo, length(data) AS dim FROM company_versions WHERE company_id=? ORDER BY id DESC", (cid,)).fetchall()
+    return jsonify({"versions": [dict(r) for r in rows]})
+
+
+@app.route("/api/admin/companies/<cid>/versions/<int:vid>", methods=["GET"])
+def admin_company_version_download(cid, vid):
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    db = get_db()
+    row = db.execute("SELECT saved_at, data FROM company_versions WHERE id=? AND company_id=?", (vid, cid)).fetchone()
+    if row is None:
+        return json_error("Versione non trovata.", 404)
+    from flask import Response
+    nome = "versione_%s_%s.json" % (cid[:8], row["saved_at"][:16].replace(":", "-"))
+    return Response(_decomprimi(row["data"]), mimetype="application/json",
+                    headers={"Content-Disposition": 'attachment; filename="%s"' % nome})
+
+
+@app.route("/api/admin/companies/<cid>/versions/<int:vid>/restore", methods=["POST"])
+def admin_company_version_restore(cid, vid):
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    db = get_db()
+    v = db.execute("SELECT saved_at, data FROM company_versions WHERE id=? AND company_id=?", (vid, cid)).fetchone()
+    cur = db.execute("SELECT data FROM companies WHERE id=?", (cid,)).fetchone()
+    if v is None or cur is None:
+        return json_error("Versione non trovata.", 404)
+    testo = _decomprimi(v["data"])
+    json.loads(testo)  # deve essere valido
+    # i dati di adesso restano nello storico: il ripristino si può sempre annullare
+    salva_versione(db, cid, cur["data"], "prima del ripristino", forza=True)
+    db.execute("UPDATE companies SET data=?, rev=rev+1 WHERE id=?", (testo, cid))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+# copia di sicurezza di tutte le aziende in un file (prima di operazioni importanti)
+@app.route("/api/admin/backup-completo", methods=["GET"])
+def admin_full_backup():
+    if not require_admin():
+        return json_error("Non autorizzato.", 401)
+    db = get_db()
+    rows = db.execute("SELECT id, name, data FROM companies ORDER BY name").fetchall()
+    out = {"creato": now_iso(), "aziende": [{"id": r["id"], "nome": r["name"], "data": json.loads(r["data"] or "{}")} for r in rows]}
+    from flask import Response
+    return Response(json.dumps(out), mimetype="application/json",
+                    headers={"Content-Disposition": 'attachment; filename="backup_completo_%s.json"' % now_iso()[:16].replace(":", "-")})
+
+
 @app.route("/api/admin/companies/<cid>/data", methods=["GET"])
 def admin_view_company_data(cid):
     if not require_admin():
@@ -1123,12 +1227,12 @@ def company_get_data():
     if not ok:
         return err
     db = get_db()
-    row = db.execute("SELECT data, plan FROM companies WHERE id=?", (session["company_id"],)).fetchone()
+    row = db.execute("SELECT data, plan, rev FROM companies WHERE id=?", (session["company_id"],)).fetchone()
     if row is None:
         return json_error("Azienda non trovata.", 404)
     plan = row["plan"] or "free"
     data = strip_gated_data(json.loads(row["data"]), plan)
-    return jsonify({"data": data, "plan": plan})
+    return jsonify({"data": data, "plan": plan, "rev": row["rev"] or 0})
 
 
 @app.route("/api/company/data", methods=["PUT"])
@@ -1142,17 +1246,22 @@ def company_save_data():
     if body is None or "data" not in body:
         return json_error("Corpo della richiesta non valido: manca 'data'.")
     db = get_db()
-    row = db.execute("SELECT data, plan FROM companies WHERE id=?", (session["company_id"],)).fetchone()
+    row = db.execute("SELECT data, plan, rev FROM companies WHERE id=?", (session["company_id"],)).fetchone()
     if row is None:
         return json_error("Azienda non trovata.", 404)
+    rev = row["rev"] or 0
+    # dati cambiati da un'altra finestra o da un altro dispositivo dopo che questa li ha aperti: non si sovrascrive
+    if body.get("rev") is not None and int(body.get("rev")) != rev:
+        return jsonify({"error": "I dati sono stati modificati da un'altra finestra o da un altro dispositivo.", "conflict": True, "rev": rev}), 409
     plan = row["plan"] or "free"
     incoming = merge_gated_data(body["data"], row["data"], plan)
+    salva_versione(db, session["company_id"], row["data"])
     db.execute(
-        "UPDATE companies SET data=? WHERE id=?",
-        (json.dumps(incoming), session["company_id"])
+        "UPDATE companies SET data=?, rev=? WHERE id=?",
+        (json.dumps(incoming), rev + 1, session["company_id"])
     )
     db.commit()
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "rev": rev + 1})
 
 
 @app.route("/api/company/change-password", methods=["PUT"])

@@ -799,24 +799,47 @@ async function serverLoadState(){
 var r = await apiGet('/api/company/data');
 if(r.ok && r.data){
 companyPlan = r.data.plan || 'free';
+serverRev = (r.data.rev === undefined || r.data.rev === null) ? null : r.data.rev; datiInConflitto = false;
 return sanitizeState(r.data.data || {});
 }
 return defaultState();
 }
 var saveTimer = null;
 var lastSaveOk = true;
+// un salvataggio alla volta; se nel frattempo i dati sono stati cambiati da un'altra finestra o da un altro
+// dispositivo, il server avvisa (invece di sovrascrivere) e qui si chiede di ricaricare
+var serverRev = null, saveInCorso = false, saveDaRifare = false, datiInConflitto = false;
 function saveState(){
 clearTimeout(saveTimer);
-saveTimer = setTimeout(async function(){
+saveTimer = setTimeout(eseguiSalvataggio, 400);
+}
+async function eseguiSalvataggio(){
+if(datiInConflitto){ mostraConflitto(); return; }
+if(saveInCorso){ saveDaRifare = true; return; }
+saveInCorso = true; saveDaRifare = false;
 try{
-var r = await apiSend('/api/company/data', 'PUT', {data: STATE});
+var corpo = {data: STATE}; if(serverRev !== null) corpo.rev = serverRev;
+var r = await apiSend('/api/company/data', 'PUT', corpo);
+if(r.status === 409 && r.data && r.data.conflict){ datiInConflitto = true; lastSaveOk = false; mostraConflitto(); }
+else {
 lastSaveOk = r.ok;
+if(r.ok && r.data && r.data.rev !== undefined) serverRev = r.data.rev;
 flashStatus(r.ok ? 'Salvato' : 'Errore nel salvataggio: riprova');
+}
 }catch(e){
 lastSaveOk = false;
 flashStatus('Connessione assente: dati NON salvati, riprova quando torni online');
 }
-}, 400);
+saveInCorso = false;
+if(saveDaRifare && !datiInConflitto) eseguiSalvataggio();
+}
+function mostraConflitto(){
+if(document.getElementById('avviso-conflitto')) return;
+var d = document.createElement('div'); d.id = 'avviso-conflitto';
+d.style.cssText = 'position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:99999;max-width:min(560px,calc(100vw - 32px));background:#fff4d6;color:#4a3b00;border:1px solid #e6c766;border-radius:12px;padding:14px 16px;box-shadow:0 10px 30px rgba(0,0,0,.18);font-size:14.5px;line-height:1.4';
+d.innerHTML = '<b>Dati modificati da un\u2019altra finestra o da un altro dispositivo.</b><br>Per non cancellare quelle modifiche, le ultime fatte qui <b>non sono state salvate</b>. Ricarica la pagina per vedere i dati aggiornati e rifai la modifica.'
+  + '<div style="margin-top:10px;text-align:right"><button type="button" style="background:#2a7c7d;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer" onclick="location.reload()">Ricarica</button></div>';
+document.body.appendChild(d);
 }
 async function bootAfterLogin(name){
 companyDisplayName = name;

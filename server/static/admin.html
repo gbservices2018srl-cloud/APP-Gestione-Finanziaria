@@ -62,7 +62,7 @@ var view = 'loading';
 var companies = [];
 var resetRequests = [];
 var errMsg = '';
-var viewingData = null;
+var viewingData = null, viewingVersions = null;
 var legalPrivacyText = '';
 var legalTermsText = '';
 var legalSaveMsg = '';
@@ -151,6 +151,9 @@ var logoutRow = el('div','btn-row');
 var logoutBtn = el('button','btn secondary','Esci');
 logoutBtn.onclick = async function(){ await apiSend('/api/admin/logout','POST'); view='login'; render(); };
 logoutRow.appendChild(logoutBtn);
+var bkAll = el('button','btn','\u2B07\uFE0F Scarica backup di tutte le aziende');
+bkAll.onclick = function(){ location.href = '/api/admin/backup-completo'; };
+logoutRow.appendChild(bkAll);
 frag.appendChild(logoutRow);
 var createCard = el('div','card');
 createCard.appendChild(el('h2',null,'Crea nuova azienda'));
@@ -320,6 +323,14 @@ viewBtn.textContent = 'Vedi dati';
 if(r.ok){ viewingData = {name:c.name, json:r.data.data}; render(); }
 else { alert('Non sono riuscito a leggere i dati di questa azienda ('+(r.data&&r.data.error?r.data.error:'errore sconosciuto')+').'); }
 };
+var storBtn = el('button','small-btn','Storico');
+storBtn.onclick = async function(){
+storBtn.textContent = 'Carico...';
+var r = await apiGet('/api/admin/companies/'+c.id+'/versions');
+storBtn.textContent = 'Storico';
+if(r.ok){ viewingVersions = {id:c.id, name:c.name, list:r.data.versions}; viewingData = null; render(); }
+else alert('Storico non disponibile ('+(r.data&&r.data.error?r.data.error:'errore')+').');
+};
 var renameBtnEl = el('button','small-btn','Rinomina');
 renameBtnEl.onclick = async function(){
 var newName = prompt('Nuovo nome per "'+c.name+'":', c.name);
@@ -386,10 +397,35 @@ if(!confirm('Eliminare definitivamente "'+c.name+'" e tutti i suoi dati? Non si 
 var r = await apiSend('/api/admin/companies/'+c.id,'DELETE');
 if(r.ok){ await loadCompanies(); render(); }
 };
-[viewBtn,renameBtnEl,pwBtn,suspendBtn,planBtn,expiryBtn,emailBtn,phoneBtn,billingBtn,delBtn].forEach(function(b){ cell.appendChild(b); });
+[viewBtn,storBtn,renameBtnEl,pwBtn,suspendBtn,planBtn,expiryBtn,emailBtn,phoneBtn,billingBtn,delBtn].forEach(function(b){ cell.appendChild(b); });
 });
 }
 frag.appendChild(listCard);
+if(viewingVersions){
+var vc = el('div','card');
+vc.appendChild(el('h2',null,'Storico di: '+viewingVersions.name));
+vc.appendChild(el('p',null,'Una versione ogni 15 minuti di lavoro (le ultime 48 ore), poi una al giorno per 30 giorni. «Ripristina» riporta <b>solo questa azienda</b> a quel momento; i dati di adesso restano nello storico, quindi si pu\u00f2 sempre tornare indietro.'));
+if(!viewingVersions.list.length) vc.appendChild(el('div','notice','Ancora nessuna versione: si creano da sole ai prossimi salvataggi.'));
+viewingVersions.list.forEach(function(v){
+var riga = el('div','btn-row');
+var quando = new Date(v.saved_at).toLocaleString('it-IT',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+riga.appendChild(el('span',null,'<b>'+quando+'</b>'+(v.motivo?' \u00b7 '+v.motivo:'')+' <small style="color:#888">('+Math.round(v.dim/1024)+' KB)</small>'));
+var dl = el('button','small-btn','Scarica');
+dl.onclick = function(){ location.href = '/api/admin/companies/'+viewingVersions.id+'/versions/'+v.id; };
+var rs = el('button','small-btn danger','Ripristina');
+rs.onclick = async function(){
+if(!confirm('Riportare "'+viewingVersions.name+'" ai dati di '+quando+'?\n\nLe altre aziende non vengono toccate. I dati di adesso restano nello storico. Chi ha l\u2019app aperta dovr\u00e0 ricaricare la pagina.')) return;
+var r = await apiSend('/api/admin/companies/'+viewingVersions.id+'/versions/'+v.id+'/restore','POST',{});
+if(r.ok){ var r2 = await apiGet('/api/admin/companies/'+viewingVersions.id+'/versions'); if(r2.ok) viewingVersions.list = r2.data.versions; render(); alert('Ripristinato.'); }
+else alert('Ripristino non riuscito ('+(r.data&&r.data.error?r.data.error:'errore')+').');
+};
+riga.appendChild(dl); riga.appendChild(rs); vc.appendChild(riga);
+});
+var chiudiV = el('button','btn secondary','Chiudi');
+chiudiV.onclick = function(){ viewingVersions = null; render(); };
+vc.appendChild(chiudiV);
+frag.appendChild(vc);
+}
 if(viewingData){
 var dataCard = el('div','card');
 dataCard.appendChild(el('h2',null,'Dati di: '+viewingData.name));
