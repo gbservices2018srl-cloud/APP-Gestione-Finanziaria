@@ -1487,6 +1487,59 @@ def _manutenzione():
                 "<div><h1>Stiamo aggiornando la Gestione finanziaria</h1><p>Torniamo tra pochi minuti. I dati sono al sicuro: riprova un po' piu' tardi.</p></div>",
                 503, {"Retry-After": "600", "Cache-Control": "no-store"})
 
+# ---------------------------------------------------------------- per le app To Smile (Scheda personale: incentivi)
+# Solo lettura, protetto dalla chiave condivisa con l'accesso unico (SSO_API_KEY). Restituisce, per l'azienda scelta,
+# il fatturato a consuntivo di ogni sede in un mese e il fatturato mensile di budget (il target).
+def _chiave_app_ok():
+    k = os.environ.get("SSO_API_KEY", "")
+    h = request.headers.get("Authorization", "")
+    return bool(k) and h == "Bearer " + k
+
+
+@app.route("/api/_appgestione/aziende", methods=["GET"])
+def appgestione_aziende():
+    if not _chiave_app_ok():
+        return json_error("Non autorizzato.", 401)
+    rows = get_db().execute("SELECT id, name FROM companies ORDER BY name").fetchall()
+    return jsonify({"aziende": [{"id": r["id"], "nome": r["name"]} for r in rows]})
+
+
+@app.route("/api/_appgestione/consuntivo", methods=["GET"])
+def appgestione_consuntivo():
+    if not _chiave_app_ok():
+        return json_error("Non autorizzato.", 401)
+    cid = request.args.get("azienda", "")
+    try:
+        anno = int(request.args.get("anno", "0"))
+        mese = int(request.args.get("mese", "0"))
+    except ValueError:
+        return json_error("Mese non valido.", 400)
+    if not 1 <= mese <= 12:
+        return json_error("Mese non valido.", 400)
+    row = get_db().execute("SELECT name, data FROM companies WHERE id=?", (cid,)).fetchone()
+    if row is None:
+        return json_error("Azienda non trovata.", 404)
+    d = json.loads(row["data"] or "{}")
+    anno_corrente = d.get("currentYear")
+    cons = (d.get("consuntivo") or {}).get("revenue") or {}
+    bud = (d.get("budget") or {}).get("revenue") or {}
+    sedi = []
+    for s in d.get("sites") or []:
+        sid = s.get("id")
+        mesi = cons.get(sid) or []
+        fatt = mesi[mese - 1] if anno == anno_corrente and len(mesi) >= mese else None
+        try:
+            fatt = float(fatt) if fatt is not None else None
+        except (TypeError, ValueError):
+            fatt = None
+        try:
+            target = float(bud.get(sid) or 0)
+        except (TypeError, ValueError):
+            target = 0
+        sedi.append({"id": sid, "nome": s.get("name") or "", "fatturato": fatt, "target": target})
+    return jsonify({"azienda": row["name"], "anno": anno, "mese": mese, "annoNelGestionale": anno_corrente, "sedi": sedi})
+
+
 @app.route("/api/_trasloco/export", methods=["GET"])
 def _trasloco_export():
     if not _trasloco_chiave_ok(request):
