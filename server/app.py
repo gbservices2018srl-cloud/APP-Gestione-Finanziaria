@@ -15,6 +15,7 @@ Avvio in locale:
 Il server parte su http://127.0.0.1:5000
 """
 import os
+import re
 import json
 import sqlite3
 import uuid
@@ -1523,6 +1524,7 @@ def appgestione_consuntivo():
     anno_corrente = d.get("currentYear")
     cons = (d.get("consuntivo") or {}).get("revenue") or {}
     bud = (d.get("budget") or {}).get("revenue") or {}
+    cat_fin = next((c for c in (d.get("varCats") or []) if re.search(r"finanziament.*pazient", c.get("name") or "", re.I)), None)
     sedi = []
     for s in d.get("sites") or []:
         sid = s.get("id")
@@ -1536,8 +1538,33 @@ def appgestione_consuntivo():
             target = float(bud.get(sid) or 0)
         except (TypeError, ValueError):
             target = 0
-        sedi.append({"id": sid, "nome": s.get("name") or "", "fatturato": fatt, "target": target})
-    return jsonify({"azienda": row["name"], "anno": anno, "mese": mese, "annoNelGestionale": anno_corrente, "sedi": sedi})
+        # CRM Commerciale: euro a consuntivo di «Tassi finanziamento verso pazienti» e fatturato, mese per mese
+        fin_mesi = [_cons_var_mese(d, cat_fin, sid, m) for m in range(12)] if (cat_fin and anno == anno_corrente) else None
+        fatt_mesi = [_num(mesi[m]) if len(mesi) > m else 0.0 for m in range(12)] if anno == anno_corrente else None
+        sedi.append({"id": sid, "nome": s.get("name") or "", "fatturato": fatt, "target": target,
+                     "finanziamenti": fin_mesi[mese - 1] if fin_mesi else None,
+                     "finanziamentiMesi": fin_mesi, "fatturatoMesi": fatt_mesi})
+    return jsonify({"azienda": row["name"], "anno": anno, "mese": mese, "annoNelGestionale": anno_corrente,
+                    "voceFinanziamenti": cat_fin.get("name") if cat_fin else None, "sedi": sedi})
+
+
+def _num(v):
+    try:
+        return float(v or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+# stessa regola della pagina Consuntivo: se la voce ha fornitori si sommano quelli, altrimenti il totale
+def _cons_var_mese(d, cat, sid, m):
+    e = (((d.get("consuntivo") or {}).get("varCat") or {}).get(cat.get("id")) or {}).get(sid)
+    if not e:
+        return 0.0
+    sup = e.get("suppliers") or []
+    if sup:
+        return sum(_num((x.get("values") or [])[m] if len(x.get("values") or []) > m else 0) for x in sup)
+    tot = e.get("total") or []
+    return _num(tot[m]) if len(tot) > m else 0.0
 
 
 @app.route("/api/_trasloco/export", methods=["GET"])
