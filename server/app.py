@@ -1525,6 +1525,9 @@ def appgestione_consuntivo():
     cons = (d.get("consuntivo") or {}).get("revenue") or {}
     bud = (d.get("budget") or {}).get("revenue") or {}
     cat_fin = next((c for c in (d.get("varCats") or []) if re.search(r"finanziament.*pazient", c.get("name") or "", re.I)), None)
+    # Gestione ASO: «Materiale di consumo» (% del Budget sul fatturato e spesa a consuntivo, mese per mese)
+    cat_mat = next((c for c in (d.get("varCats") or []) if re.search(r"material.*consumo", c.get("name") or "", re.I)), None)
+    var_pct = (d.get("budget") or {}).get("varPct") or {}
     sedi = []
     for s in d.get("sites") or []:
         sid = s.get("id")
@@ -1543,9 +1546,12 @@ def appgestione_consuntivo():
         fatt_mesi = [_num(mesi[m]) if len(mesi) > m else 0.0 for m in range(12)] if anno == anno_corrente else None
         sedi.append({"id": sid, "nome": s.get("name") or "", "fatturato": fatt, "target": target,
                      "finanziamenti": fin_mesi[mese - 1] if fin_mesi else None,
-                     "finanziamentiMesi": fin_mesi, "fatturatoMesi": fatt_mesi})
+                     "finanziamentiMesi": fin_mesi, "fatturatoMesi": fatt_mesi,
+                     "materialePct": _num((var_pct.get(cat_mat.get("id")) or {}).get(sid)) if cat_mat else None,
+                     "materialeMesi": [_cons_var_mese(d, cat_mat, sid, m) for m in range(12)] if (cat_mat and anno == anno_corrente) else None})
     return jsonify({"azienda": row["name"], "anno": anno, "mese": mese, "annoNelGestionale": anno_corrente,
-                    "voceFinanziamenti": cat_fin.get("name") if cat_fin else None, "sedi": sedi})
+                    "voceFinanziamenti": cat_fin.get("name") if cat_fin else None,
+                    "voceMateriale": cat_mat.get("name") if cat_mat else None, "sedi": sedi})
 
 
 def _num(v):
