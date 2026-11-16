@@ -1619,7 +1619,7 @@ return {costoFisso:costoFisso,costoProf:costoProf,totVar:totVar,incCostiVar:incC
 mdc:mdc,mdcPct:mdcPct,bepPrestazione:bepPrestazione,ebit:ebit,margine:margine,guadagnoMinuto:guadagnoMinuto};
 }
 function calcContoEconomico(){
-var rows=[]; var cumFatt=0,cumFissi=0,cumVar=0,cumRis=0;
+var rows=[]; var cumFatt=0,cumFissi=0,cumVar=0,cumRis=0,cumTotVoci=0;
 var cumByCol = {};
 STATE.ceColumns.forEach(function(col){ cumByCol[col.id]=0; });
 for(var m=0;m<12;m++){
@@ -1628,15 +1628,30 @@ var fissi = consFixedTotalMonthAll(m);
 var vari = consVarTotalMonthAll(m);
 var risultato = fatt-fissi-vari;
 var colValues = {};
+var totVoci = 0;
 STATE.ceColumns.forEach(function(col){
-var v = risultato*(Number(col.pct)||0)/100;
+var v = ceColValue(col, fatt, risultato);
 colValues[col.id] = v;
 cumByCol[col.id] += v;
+totVoci += v;
 });
-cumFatt+=fatt; cumFissi+=fissi; cumVar+=vari; cumRis+=risultato;
-rows.push({m:m,fatt:fatt,fissi:fissi,vari:vari,risultato:risultato,colValues:colValues});
+cumFatt+=fatt; cumFissi+=fissi; cumVar+=vari; cumRis+=risultato; cumTotVoci+=totVoci;
+rows.push({m:m,fatt:fatt,fissi:fissi,vari:vari,risultato:risultato,colValues:colValues,totVoci:totVoci});
 }
-return {rows:rows,cumFatt:cumFatt,cumFissi:cumFissi,cumVar:cumVar,cumRis:cumRis,cumByCol:cumByCol};
+return {rows:rows,cumFatt:cumFatt,cumFissi:cumFissi,cumVar:cumVar,cumRis:cumRis,cumByCol:cumByCol,cumTotVoci:cumTotVoci};
+}
+// voce del conto economico: % sull'utile (come prima), % sul fatturato, oppure fisso al mese
+function ceColTipo(col){ return col.tipo==='fatturato'||col.tipo==='fisso' ? col.tipo : 'utile'; }
+function ceColValue(col, fatt, risultato){
+var t = ceColTipo(col);
+if(t==='fisso') return Number(col.importo)||0;
+if(t==='fatturato') return fatt*(Number(col.pct)||0)/100;
+return risultato*(Number(col.pct)||0)/100;
+}
+function ceColLabel(col){
+var t = ceColTipo(col);
+if(t==='fisso') return fmtEUR(Number(col.importo)||0)+' al mese';
+return (Number(col.pct)||0)+'% '+(t==='fatturato'?'sul '+BASE().toLowerCase():'sull\u2019utile');
 }
 function addCEColumn(name, pct){
 STATE.ceColumns.push({id:uid('cecol'), name:name||'Nuova colonna', pct:Number(pct)||0});
@@ -4489,28 +4504,33 @@ kpis.appendChild(kpi('Risultato netto', fmtEUR(ce.cumRis), ce.cumRis>=0?'pos':'n
 main.appendChild(kpis);
 var colCard = el('div','card');
 colCard.appendChild(el('h2',null,'Colonne di calcolo personalizzate'));
-colCard.appendChild(el('div','help-tip','Aggiungi quante colonne vuoi (es. Tasse, Accantonamenti, o altro): ognuna calcola una percentuale a tua scelta sul risultato (utile) di ogni mese.'));
+colCard.appendChild(el('div','help-tip','Aggiungi quante voci vuoi (es. Tasse, Accantonamenti, Compenso amministratore): per ognuna scegli se \u00e8 una % sull\u2019utile, una % sul '+BASE().toLowerCase()+' o un importo fisso al mese. Nella tabella trovi anche il totale delle voci.'));
 STATE.ceColumns.forEach(function(col){
 var row = el('div','input-row');
 var nameInp = document.createElement('input'); nameInp.type='text'; nameInp.value=col.name; nameInp.style.width='200px';
 nameInp.addEventListener('input', function(){ col.name = nameInp.value; saveState(); });
 nameInp.addEventListener('change', function(){ render(); });
 row.appendChild(nameInp);
+var tipoSel = document.createElement('select'); tipoSel.style.marginRight='8px';
+[['utile','% sull\u2019utile'],['fatturato','% sul '+BASE().toLowerCase()],['fisso','Fisso al mese (\u20ac)']].forEach(function(o){ var op=document.createElement('option'); op.value=o[0]; op.textContent=o[1]; if(ceColTipo(col)===o[0]) op.selected=true; tipoSel.appendChild(op); });
+tipoSel.addEventListener('change', function(){ col.tipo = tipoSel.value; saveState(); render(); });
+row.appendChild(tipoSel);
+var fisso = ceColTipo(col)==='fisso';
 var pctWrap = el('span','money-cell');
-var pctInp = document.createElement('input'); pctInp.type='number'; pctInp.step='0.1'; pctInp.value=col.pct;
-pctInp.addEventListener('input', function(){ col.pct = parseFloat(pctInp.value)||0; saveState(); });
+var pctInp = document.createElement('input'); pctInp.type='number'; pctInp.step= fisso ? '1' : '0.1'; pctInp.value = fisso ? (col.importo||0) : col.pct;
+pctInp.addEventListener('input', function(){ var v = parseFloat(pctInp.value)||0; if(fisso) col.importo = v; else col.pct = v; saveState(); });
 pctInp.addEventListener('change', function(){ render(); });
 pctWrap.appendChild(pctInp);
 row.appendChild(pctWrap);
-row.appendChild(document.createTextNode(' % del risultato mensile'));
+row.appendChild(document.createTextNode(fisso ? ' \u20ac ogni mese' : ' %'));
 var rmBtn = el('button','small-btn','Rimuovi'); rmBtn.style.marginLeft='12px'; rmBtn.style.color='var(--red)';
 rmBtn.onclick = function(){ removeCEColumn(col.id); render(); };
 row.appendChild(rmBtn);
 colCard.appendChild(row);
 });
-var addColBtn = el('button','btn secondary','+ Aggiungi colonna');
+var addColBtn = el('button','btn secondary','+ Aggiungi voce');
 addColBtn.onclick = function(){
-showPromptModal('Nome della nuova colonna (es. Tasse, Accantonamenti...)', 'Nuova colonna', function(name){
+showPromptModal('Nome della nuova voce (es. Tasse, Accantonamenti...)', 'Nuova voce', function(name){
 addCEColumn(name, 0);
 render();
 });
@@ -4520,15 +4540,17 @@ main.appendChild(colCard);
 var card = el('div','card');
 var wrap = el('div','table-scroll');
 var table = document.createElement('table'); table.className='datatable';
-var head = '<tr><th>Mese</th><th>'+BASE()+'</th><th>Costi fissi</th><th>Costi variabili</th><th>Risultato</th>'+STATE.ceColumns.map(function(col){return '<th>'+col.name.replace(/</g,'&lt;')+' ('+col.pct+'%)</th>';}).join('')+'</tr>';
+var head = '<tr><th>Mese</th><th>'+BASE()+'</th><th>Costi fissi</th><th>Costi variabili</th><th>Risultato</th>'+STATE.ceColumns.map(function(col){return '<th>'+col.name.replace(/</g,'&lt;')+'<br><span style="font-weight:400;font-size:11px">'+ceColLabel(col)+'</span></th>';}).join('')+(STATE.ceColumns.length?'<th>Totale voci</th>':'')+'</tr>';
 var body='';
 ce.rows.forEach(function(r){
 body += '<tr><td>'+MONTHS[r.m]+'</td><td>'+fmtEUR(r.fatt)+'</td><td>'+fmtEUR(r.fissi)+'</td><td>'+fmtEUR(r.vari)+'</td><td class="'+(r.risultato>=0?'pos':'neg')+'">'+fmtEUR(r.risultato)+'</td>'+
 STATE.ceColumns.map(function(col){return '<td>'+fmtEUR(r.colValues[col.id]||0)+'</td>';}).join('')+
+(STATE.ceColumns.length?'<td><b>'+fmtEUR(r.totVoci)+'</b></td>':'')+
 '</tr>';
 });
 body += '<tr class="total-row"><td>TOTALE</td><td>'+fmtEUR(ce.cumFatt)+'</td><td>'+fmtEUR(ce.cumFissi)+'</td><td>'+fmtEUR(ce.cumVar)+'</td><td>'+fmtEUR(ce.cumRis)+'</td>'+
 STATE.ceColumns.map(function(col){return '<td>'+fmtEUR(ce.cumByCol[col.id]||0)+'</td>';}).join('')+
+(STATE.ceColumns.length?'<td>'+fmtEUR(ce.cumTotVoci)+'</td>':'')+
 '</tr>';
 table.innerHTML = '<thead>'+head+'</thead><tbody>'+body+'</tbody>';
 wrap.appendChild(table); card.appendChild(wrap);
