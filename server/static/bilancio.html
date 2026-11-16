@@ -650,12 +650,13 @@ function pBudget(S) {
   </div></div>
   <h2 style="font-family:var(--font-brand);color:var(--navy);font-size:16px;margin:0 0 10px">Indicatori previsionali ${S.anno}</h2>
   ${kpi(S.budget, S.base, `consuntivo ${D.base.anno}`)}
-  <div class="card" style="margin-top:18px"><h2>Voci del budget <span class="sp"></span><span class="muted" style="text-transform:none;letter-spacing:0;font-weight:600;font-size:12.5px">${ME.admin ? 'Le modifiche si salvano da sole' : 'Sola consultazione'}</span></h2>
+  <div class="card" style="margin-top:18px"><h2>Voci del budget <span class="sp"></span><span class="muted" style="text-transform:none;letter-spacing:0;font-weight:600;font-size:12.5px">${ME.admin ? 'Le modifiche si salvano da sole' : 'Sola consultazione'}</span>${ME.admin && !NV ? `<button class="btn small primary" data-nuova-voce style="margin-left:10px">${ic('plus')}Nuova voce</button>` : ''}</h2>
+  ${ME.admin && NV ? formNuovaVoce() : ''}
   <div class="table-scroll"><table class="dt"><thead><tr><th>Voce</th><th>${D.base.anno}</th><th>% fatt.</th><th class="c">Natura</th><th class="l">Metodo</th><th>Valore</th><th>Budget ${S.anno}</th><th>% fatt.</th><th>Δ</th></tr></thead><tbody>
   ${perArea(ord(voci()), v => {
     const r = b.righe[v.id] || { metodo: 'auto' }, x = base(v.id), y = S.bud[v.id] || 0;
     const valIn = ['perc', 'importo', 'incidenza'].includes(r.metodo) ? `<input inputmode="decimal" data-bv="${esc(v.id)}" value="${esc(r.valore != null ? nf1.format(+r.valore).replace(/,0$/, '') : '')}" placeholder="${r.metodo === 'importo' ? '€' : '%'}" ${ro}>` : `<span class="muted" style="font-size:12px">${r.metodo === 'auto' ? metodoAutoTxt(v) : ''}</span>`;
-    return `<tr class="${v.nuova ? 'nuova' : ''}"><td><span class="vd" title="${esc(v.codice + ' ' + v.descr)}">${v.nuova ? '<span class="tag new">NUOVA</span> ' : ''}${esc(v.descr)}</span><span class="cod">${esc(v.codice)}</span></td>
+    return `<tr class="${v.nuova ? 'nuova' : ''}"><td><span class="vd" title="${esc(v.codice + ' ' + v.descr)}">${v.nuova ? '<span class="tag new">NUOVA</span> ' : ''}${v.manuale ? '<span class="tag f" title="Creata a mano nel budget">A MANO</span> ' : ''}${esc(v.descr)}</span>${v.manuale ? (ME.admin ? `<button class="btn small danger" data-del-voce="${esc(v.id)}" title="Togli questa voce" style="margin-left:6px;padding:2px 8px">${ic('trash')}</button>` : '') : `<span class="cod">${esc(v.codice)}</span>`}</td>
       <td>${eur(x)}</td><td class="muted">${fbase ? pct(x / fbase) : ''}</td><td class="c">${natTag(v)}</td>
       <td class="l"><select data-bm="${esc(v.id)}" ${ro}>${METODI.filter(m => m[0] !== 'incidenza' || v.area !== 'ricavi').map(m => `<option value="${m[0]}" ${r.metodo === m[0] ? 'selected' : ''}>${m[1]}</option>`).join('')}</select></td>
       <td>${valIn}</td><td><b>${eur(y)}</b></td><td class="muted">${fb ? pct(y / fb) : ''}</td><td class="${y - x > 0.5 ? (AREA[v.area].lato === 'ricavo' ? 'pos' : 'neg') : y - x < -0.5 ? (AREA[v.area].lato === 'ricavo' ? 'neg' : 'pos') : 'muted'}">${x || y ? (y >= x ? '+' : '') + eur(y - x) : ''}</td></tr>`;
@@ -663,6 +664,17 @@ function pBudget(S) {
     return `<tr class="tot"><td>Totale ${a.l.toLowerCase()}</td><td>${eur(x)}</td><td>${fbase ? pct(x / fbase) : ''}</td><td></td><td></td><td></td><td>${eur(y)}</td><td>${fb ? pct(y / fb) : ''}</td><td>${(y >= x ? '+' : '') + eur(y - x)}</td></tr>`; })}
   </tbody></table></div></div>
   <div class="card"><h2>Conto economico riclassificato</h2>${tabCE([{ t: `Consuntivo ${D.base.anno}`, k: S.base, pct: true }, { t: `Budget ${S.anno}`, k: S.budget, pct: true }, { t: 'Differenza', diff: [1, 0] }])}</div>`;
+}
+// voce creata a mano nel budget (non arriva dal bilancio PDF): nome, area del conto economico, fisso/variabile, importo annuo
+let NV = null;
+function formNuovaVoce() {
+  const a = AREA[NV.area || 'amministrativi'];
+  return `<div class="card" style="background:var(--bg,#f6f8f8);margin:0 0 14px;padding:14px 16px"><div class="params">
+    <label class="field" style="flex:2 1 260px">Nome della voce<input id="nv-descr" maxlength="120" value="${esc(NV.descr || '')}" placeholder="es. Consulenza qualità"></label>
+    <label class="field">Area del conto economico<select id="nv-area">${AREE.map(x => `<option value="${x.k}" ${x.k === (NV.area || 'amministrativi') ? 'selected' : ''}>${x.l}</option>`).join('')}</select></label>
+    ${a.natura ? `<label class="field">Natura<select id="nv-nat"><option value="F" ${NV.natura !== 'V' ? 'selected' : ''}>Costo fisso</option><option value="V" ${NV.natura === 'V' ? 'selected' : ''}>Costo variabile</option></select></label>` : ''}
+    <label class="field">Budget ${esc(String(D.budget.anno || ''))} (€ all'anno)<input id="nv-imp" inputmode="decimal" value="${esc(NV.imp || '')}" placeholder="0"></label>
+  </div><div class="row" style="margin-top:10px;gap:8px"><button class="btn small primary" data-salva-voce>${ic('plus')}Aggiungi al budget</button><button class="btn small" data-annulla-voce>Annulla</button></div></div>`;
 }
 const natTag = v => !AREA[v.area]?.natura ? '<span class="tag x" title="Fuori dal calcolo fissi/variabili">—</span>' : v.natura === 'V' ? '<span class="tag v">Variabile</span>' : v.natura === 'F' ? '<span class="tag f">Fisso</span>' : '<span class="tag new">Da classificare</span>';
 
@@ -991,6 +1003,22 @@ document.addEventListener('click', e => {
   if (t.hasAttribute('data-proponi')) { for (const v of voci()) if (AREA[v.area]?.natura && !v.natura) v.natura = proponi(v).natura || 'F'; salva(); toast('Proposte applicate: controllale.'); return render(); }
   const aggiungi = id => { const v = D.voci[id]; const inp = document.querySelector(`[data-nuova-b="${CSS.escape(id)}"]`); D.budget.righe[id] = { metodo: 'importo', valore: num(inp?.value) }; v.nuova = false; };
   if (d.aggiungi) { aggiungi(d.aggiungi); salva(); toast('Aggiunta al budget.'); return render(); }
+  if (t.hasAttribute('data-nuova-voce')) { NV = { area: 'amministrativi', natura: 'F' }; render(); return setTimeout(() => $('#nv-descr')?.focus()); }
+  if (t.hasAttribute('data-annulla-voce')) { NV = null; return render(); }
+  if (t.hasAttribute('data-salva-voce')) {
+    const descr = ($('#nv-descr')?.value || '').trim(), area = $('#nv-area')?.value || 'amministrativi';
+    if (descr.length < 2) { toast('Scrivi il nome della voce.'); return $('#nv-descr')?.focus(); }
+    if (voci().some(v => v.descr.trim().toLowerCase() === descr.toLowerCase() && v.area === area)) return toast('C\'è già una voce con questo nome in quest\'area.');
+    const id = 'man_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    D.voci[id] = { id, codice: 'zz ' + descr, descr, lato: AREA[area].lato, area, natura: AREA[area].natura ? ($('#nv-nat')?.value || 'F') : '', manuale: true };
+    D.budget.righe[id] = { metodo: 'importo', valore: num($('#nv-imp')?.value) };
+    NV = null; salva(); toast('Voce aggiunta al budget.'); return render();
+  }
+  if (d.delVoce) {
+    const v = D.voci[d.delVoce]; if (!v?.manuale) return;
+    if (!confirm(`Togliere la voce «${v.descr}» dal budget?`)) return;
+    delete D.voci[d.delVoce]; delete D.budget.righe[d.delVoce]; salva(); toast('Voce tolta.'); return render();
+  }
   if (t.hasAttribute('data-aggiungi-tutte')) { voci().filter(v => v.nuova).forEach(v => aggiungi(v.id)); salva(); toast('Voci aggiunte al budget.'); return render(); }
 });
 document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-carica]')) { e.preventDefault(); e.target.click(); } });
@@ -998,6 +1026,8 @@ document.addEventListener('change', e => {
   const t = e.target, d = t.dataset;
   if (t.id === 'pdfin') return leggiPdf(t.files[0], PDF_PER);
   if (!ME.admin) return;
+  if (t.id === 'nv-area') { NV = { descr: $('#nv-descr')?.value, imp: $('#nv-imp')?.value, natura: $('#nv-nat')?.value || 'F', area: t.value }; return render(); }
+  if (['nv-descr', 'nv-imp', 'nv-nat'].includes(t.id)) return;
   if (d.area) { const v = D.voci[d.area]; v.area = t.value; if (AREA[v.area].natura && !v.natura) v.natura = proponi(v).natura; if (!AREA[v.area].natura) v.natura = ''; v.proposta = false; salva(); return setTimeout(render); }
   if (d.bm) { // valore di partenza sensato per il metodo scelto
     const S = scenari(), r = { metodo: t.value };
