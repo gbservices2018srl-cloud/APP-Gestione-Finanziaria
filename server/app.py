@@ -1605,6 +1605,111 @@ def appgestione_produzione():
     return jsonify({"ok": True, "prima": prima, "dopo": valore})
 
 
+# REC · Pannello cassa: le spese di cassa (uscite) si aggiungono alla voce del Consuntivo della sede, nel loro mese.
+# Si AGGIUNGE (delta) a quello che c'è già, mai sovrascritto; uno storno è un delta negativo. Voce trovata per nome
+# tra le voci fisse e le categorie variabili; nelle variabili con fornitori va nella riga fornitore «Cassa (REC)».
+def _norm_voce(x):
+    return re.sub(r"[^a-z0-9]", "", (x or "").lower().replace("à", "a"))
+
+
+def _trova_voce(d, nome):
+    n = _norm_voce(nome)
+    fx = [it for it in d.get("fixedItems") or [] if _norm_voce(it.get("name")) == n]
+    vc = [c for c in d.get("varCats") or [] if _norm_voce(c.get("name")) == n]
+    if len(fx) + len(vc) != 1:
+        return None, None
+    return ("fisso", fx[0]) if fx else ("variabile", vc[0])
+
+
+@app.route("/api/_appgestione/voci", methods=["GET"])
+def appgestione_voci():
+    if not _chiave_app_ok():
+        return json_error("Non autorizzato.", 401)
+    row = get_db().execute("SELECT data FROM companies WHERE id=?", (request.args.get("azienda", ""),)).fetchone()
+    if row is None:
+        return json_error("Azienda non trovata.", 404)
+    d = json.loads(row["data"] or "{}")
+    cerca = [x for x in request.args.get("nomi", "").split("|") if x.strip()]
+    trovate = {}
+    for nome in cerca:
+        tipo, v = _trova_voce(d, nome)
+        trovate[nome] = {"tipo": tipo, "nome": v.get("name")} if v else None
+    return jsonify({"anno": d.get("currentYear"), "voci": trovate})
+
+
+@app.route("/api/_appgestione/costi-cassa", methods=["POST"])
+def appgestione_costi_cassa():
+    if not _chiave_app_ok():
+        return json_error("Non autorizzato.", 401)
+    body = request.get_json(force=True, silent=True) or {}
+    cid = str(body.get("azienda") or "")
+    try:
+        anno = int(body.get("anno") or 0)
+    except (TypeError, ValueError):
+        return json_error("Anno non valido.", 400)
+    mov = body.get("movimenti") or []
+    if not isinstance(mov, list) or not mov or len(mov) > 500:
+        return json_error("Nessuna spesa da mandare.", 400)
+    db = get_db()
+    row = db.execute("SELECT data, rev FROM companies WHERE id=?", (cid,)).fetchone()
+    if row is None:
+        return json_error("Azienda non trovata.", 404)
+    d = json.loads(row["data"] or "{}")
+    if d.get("currentYear") != anno:
+        return json_error("Nella Gestione finanziaria il consuntivo aperto è del %s, non del %s." % (d.get("currentYear"), anno), 409)
+    siti = {s.get("id") for s in d.get("sites") or []}
+    # prima si controlla tutto, poi si scrive: o vanno tutte o nessuna
+    piano = []
+    for m in mov:
+        try:
+            mese = int(m.get("mese") or 0)
+            delta = round(float(m.get("delta")), 2)
+        except (TypeError, ValueError):
+            return json_error("Dati non validi.", 400)
+        sid = str(m.get("sedeId") or "")
+        if sid not in siti:
+            return json_error("Sede non trovata nella Gestione finanziaria.", 404)
+        if not 1 <= mese <= 12 or abs(delta) > 1000000:
+            return json_error("Dati non validi.", 400)
+        tipo, v = _trova_voce(d, m.get("voce"))
+        if not v:
+            return json_error("La voce «%s» non c'è nella Gestione finanziaria (o ce n'è più di una con lo stesso nome)." % m.get("voce"), 404)
+        piano.append((tipo, v, sid, mese, delta))
+    cons = d.setdefault("consuntivo", {})
+    for tipo, v, sid, mese, delta in piano:
+        if tipo == "fisso":
+            arr = cons.setdefault("fixed", {}).setdefault(v["id"], {}).get(sid)
+            arr = list(arr or [])
+            while len(arr) < 12:
+                arr.append(0)
+            arr[mese - 1] = round(_num(arr[mese - 1]) + delta, 2)
+            cons["fixed"][v["id"]][sid] = arr
+        else:
+            e = cons.setdefault("varCat", {}).setdefault(v["id"], {}).get(sid) or {"total": [0] * 12, "suppliers": []}
+            if e.get("suppliers"):
+                riga = next((x for x in e["suppliers"] if x.get("name") == "Cassa (REC)"), None)
+                if riga is None:
+                    riga = {"id": "sup_rec_" + sid[-6:], "name": "Cassa (REC)", "values": [0] * 12}
+                    e["suppliers"].append(riga)
+                vals = list(riga.get("values") or [])
+                while len(vals) < 12:
+                    vals.append(0)
+                vals[mese - 1] = round(_num(vals[mese - 1]) + delta, 2)
+                riga["values"] = vals
+            else:
+                tot = list(e.get("total") or [])
+                while len(tot) < 12:
+                    tot.append(0)
+                tot[mese - 1] = round(_num(tot[mese - 1]) + delta, 2)
+                e["total"] = tot
+            cons["varCat"][v["id"]][sid] = e
+    rev = row["rev"] or 0
+    salva_versione(db, cid, row["data"], "prima delle spese di cassa da REC", forza=True)
+    db.execute("UPDATE companies SET data=?, rev=? WHERE id=?", (json.dumps(d), rev + 1, cid))
+    db.commit()
+    return jsonify({"ok": True, "scritte": len(piano)})
+
+
 def _num(v):
     try:
         return float(v or 0)
