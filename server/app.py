@@ -1549,9 +1549,17 @@ def appgestione_consuntivo():
                      "finanziamentiMesi": fin_mesi, "fatturatoMesi": fatt_mesi,
                      "materialePct": _num((var_pct.get(cat_mat.get("id")) or {}).get(sid)) if cat_mat else None,
                      "materialeMesi": [_cons_var_mese(d, cat_mat, sid, m) for m in range(12)] if (cat_mat and anno == anno_corrente) else None})
+    # sede direzionale (impostata nella Gestione finanziaria) e sedi su cui si ripartiscono i suoi costi: solo lettura
+    dz = d.get("direzione") or {}
+    ids = {s.get("id") for s in d.get("sites") or []}
+    direzione = None
+    if dz.get("sedeId") in ids:
+        rip = [x for x in (dz.get("sedi") or []) if x in ids and x != dz.get("sedeId")]
+        if rip:
+            direzione = {"sedeId": dz.get("sedeId"), "sedi": rip, "criterio": dz.get("criterio") or "base"}
     return jsonify({"azienda": row["name"], "anno": anno, "mese": mese, "annoNelGestionale": anno_corrente,
                     "voceFinanziamenti": cat_fin.get("name") if cat_fin else None,
-                    "voceMateriale": cat_mat.get("name") if cat_mat else None, "sedi": sedi})
+                    "voceMateriale": cat_mat.get("name") if cat_mat else None, "sedi": sedi, "direzione": direzione})
 
 
 def _num(v):
