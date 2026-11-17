@@ -1939,6 +1939,10 @@ currentPage = p.id; closeMobileMenu(); render();
 };
 nav.appendChild(btn);
 });
+if(ssoMode){ var homeBtn = document.createElement('a');
+homeBtn.className = 'navbtn'; homeBtn.href = ssoHome || 'https://appgestione.it/'; homeBtn.style.textDecoration='none';
+homeBtn.innerHTML = '<span class="navico">&#8592;</span>Le mie app';
+nav.appendChild(homeBtn); }
 var logoutBtn = document.createElement('button');
 logoutBtn.className = 'navbtn'; logoutBtn.style.opacity='.75';
 logoutBtn.innerHTML = '<span class="navico">&#8644;</span>Esci';
