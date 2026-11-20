@@ -1850,6 +1850,90 @@ def appgestione_persone():
     return jsonify({"ok": True, "prova": prova, "scritto": bool(cambiato and not prova), "esiti": esiti})
 
 
+# ---------- Compenso medici (app To Smile): il compenso pagato va nel Consuntivo ----------
+# Riga del medico nei «Costi per dottori», nella sede del compenso, nel mese del pagamento: si SOMMA a quello che c'è.
+# Ogni pagamento ha un riferimento: se arriva due volte non si somma di nuovo.
+@app.route("/api/_appgestione/compensi-medici", methods=["POST"])
+def appgestione_compensi_medici():
+    if not _chiave_app_ok():
+        return json_error("Non autorizzato.", 401)
+    body = request.get_json(force=True, silent=True) or {}
+    cid = str(body.get("azienda") or "")
+    pag = body.get("pagamenti") or []
+    if not isinstance(pag, list) or not pag or len(pag) > 500:
+        return json_error("Nessun pagamento da mandare.", 400)
+    db = get_db()
+    row = db.execute("SELECT data, rev FROM companies WHERE id=?", (cid,)).fetchone()
+    if row is None:
+        return json_error("Azienda non trovata.", 404)
+    d = json.loads(row["data"] or "{}")
+    if d.get("_editingArchivedYear") not in (None, ""):
+        return json_error("In Gestione finanziaria è aperto un anno archiviato: riprova quando torni all'anno in corso.", 409)
+    cat = next((c for c in d.get("varCats") or [] if c.get("suppliers") and re.search(r"dottor|medic", c.get("name") or "", re.I)), None)
+    if not cat:
+        return json_error("In Gestione finanziaria non trovo la voce «Costi per dottori».", 404)
+    sites = d.get("sites") or []
+    M = d.setdefault("supplierMaster", [])
+    fatti = d.setdefault("_compensiPagati", [])
+    # prima si controlla tutto, poi si scrive: o vanno tutti o nessuno
+    piano = []
+    for p in pag:
+        ref = str(p.get("ref") or "")[:80]
+        try:
+            anno = int(p.get("anno") or 0); mese = int(p.get("mese") or 0)
+            imp = round(float(p.get("importo")), 2)
+        except (TypeError, ValueError):
+            return json_error("Dati non validi.", 400)
+        if not ref or not 1 <= mese <= 12 or not 0 < imp <= 1000000:
+            return json_error("Dati non validi.", 400)
+        if ref in fatti:
+            continue
+        if d.get("currentYear") != anno:
+            return json_error("Nella Gestione finanziaria il consuntivo aperto è del %s, il pagamento è del %s." % (d.get("currentYear"), anno), 409)
+        s = _trova_sede_fin(sites, p.get("sede"))
+        if not s:
+            return json_error("La sede «%s» non c'è nella Gestione finanziaria." % p.get("sede"), 404)
+        m = next((x for x in M if x.get("catId") == cat["id"] and x.get("ref") == str(p.get("medicoRef") or "")), None)
+        if m is None:
+            return json_error("%s non è ancora tra i medici della Gestione finanziaria." % (p.get("nome") or "Il medico"), 404)
+        piano.append((ref, m, s["id"], mese, imp))
+    if not piano:
+        return jsonify({"ok": True, "scritti": 0})
+    cons = d.setdefault("consuntivo", {}).setdefault("varCat", {}).setdefault(cat["id"], {})
+    for ref, m, sid, mese, imp in piano:
+        m.setdefault("sites", {})[sid] = True
+        e = cons.get(sid)
+        if not isinstance(e, dict):
+            e = {"total": [0] * 12, "suppliers": []}
+            cons[sid] = e
+        if not isinstance(e.get("suppliers"), list):
+            e["suppliers"] = []
+        if not isinstance(e.get("total"), list):
+            e["total"] = [0] * 12
+        riga = next((x for x in e["suppliers"] if x.get("id") == m["id"]), None)
+        if riga is None:
+            # come fa la pagina: valori parcheggiati della riga, oppure il totale se la voce non aveva ancora righe
+            pk = (m.get("parked") or {}).get(sid)
+            if isinstance(pk, dict) and isinstance(pk.get("values"), list):
+                vals = [_num(v) for v in pk["values"]]; m["parked"].pop(sid, None)
+            elif not e["suppliers"] and any(_num(v) for v in e["total"]):
+                vals = [_num(v) for v in e["total"]]; e["total"] = [0] * 12
+            else:
+                vals = [0] * 12
+            riga = {"id": m["id"], "name": m.get("name"), "values": vals}
+            e["suppliers"].append(riga)
+        vals = list(riga.get("values") or [])
+        while len(vals) < 12:
+            vals.append(0)
+        vals[mese - 1] = round(_num(vals[mese - 1]) + imp, 2)
+        riga["values"] = vals
+        fatti.append(ref)
+    salva_versione(db, cid, row["data"], "prima dei compensi medici pagati", forza=True)
+    db.execute("UPDATE companies SET data=?, rev=? WHERE id=?", (json.dumps(d), (row["rev"] or 0) + 1, cid))
+    db.commit()
+    return jsonify({"ok": True, "scritti": len(piano)})
+
+
 @app.route("/api/_trasloco/export", methods=["GET"])
 def _trasloco_export():
     if not _trasloco_chiave_ok(request):
