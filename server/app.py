@@ -1729,6 +1729,127 @@ def _cons_var_mese(d, cat, sid, m):
     return _num(tot[m]) if len(tot) > m else 0.0
 
 
+# ---------- persone registrate nelle app To Smile → Gestione finanziaria ----------
+# Medici a partita IVA: tra i dottori dei costi variabili («Costi per dottori»), spuntati nelle loro sedi.
+# Dipendenti CCNL e partite IVA non medici: negli «Stipendi fissi lordi», un collaboratore per ogni loro sede.
+# Si aggiunge e basta: niente si toglie o si rinomina, gli importi non si toccano. Chi è già presente con lo stesso
+# nome (anche messo a mano) viene collegato invece di essere duplicato.
+_TITOLI = {"dr", "dott", "dottor", "dottore", "dottssa", "dottoressa", "doc", "prof", "sig", "sigra"}
+def _parole_nome(n):
+    t = re.sub(r"[^a-zà-ü' ]", " ", str(n or "").lower().replace(".", ""))
+    return frozenset(w for w in t.split() if w and w not in _TITOLI)
+def _stesso_nome(a, b):
+    pa, pb = _parole_nome(a), _parole_nome(b)
+    return bool(pa) and pa == pb
+def _norm_sede_fin(x):
+    return re.sub(r"[^a-z0-9]", "", re.sub(r"to\s*smile|studio|sede|ambulatorio", "", str(x or "").lower()))
+def _trova_sede_fin(sites, nome):
+    n = _norm_sede_fin(nome)
+    if not n:
+        return None
+    L = [(s, _norm_sede_fin(s.get("name"))) for s in sites]
+    es = [s for s, k in L if k and k == n]
+    if len(es) == 1:
+        return es[0]
+    c = [s for s, k in L if k and (k in n or n in k)]
+    return c[0] if len(c) == 1 else None
+
+
+@app.route("/api/_appgestione/persone", methods=["POST"])
+def appgestione_persone():
+    if not _chiave_app_ok():
+        return json_error("Non autorizzato.", 401)
+    body = request.get_json(force=True, silent=True) or {}
+    cid = str(body.get("azienda") or "")
+    prova = bool(body.get("prova"))
+    persone = body.get("persone") or []
+    if not isinstance(persone, list) or len(persone) > 500:
+        return json_error("Dati non validi.", 400)
+    db = get_db()
+    row = db.execute("SELECT data, rev FROM companies WHERE id=?", (cid,)).fetchone()
+    if row is None:
+        return json_error("Azienda non trovata.", 404)
+    d = json.loads(row["data"] or "{}")
+    if d.get("_editingArchivedYear") not in (None, ""):
+        return json_error("In Gestione finanziaria è aperto un anno archiviato: riprova quando torni all'anno in corso.", 409)
+    sites = d.get("sites") or []
+    cat_dott = next((c for c in d.get("varCats") or [] if c.get("suppliers") and re.search(r"dottor|medic", c.get("name") or "", re.I)), None)
+    cat_stip = next((c for c in d.get("fixedCats") or [] if re.search(r"stipend", c.get("name") or "", re.I)), None)
+    M = d.setdefault("supplierMaster", [])
+    items = d.setdefault("fixedItems", [])
+    esiti, cambiato = [], False
+    for p in persone:
+        ref = str(p.get("ref") or "")[:64]
+        nome = re.sub(r"\s+", " ", str(p.get("nome") or "")).strip()[:120]
+        tipo = p.get("tipo")
+        if not ref or not nome or tipo not in ("medico", "stipendio"):
+            continue
+        es = {"ref": ref, "nome": nome, "tipo": tipo, "sedi": [], "nuove": [], "senzaSede": [], "azione": "presente"}
+        for sn in p.get("sedi") or []:
+            s = _trova_sede_fin(sites, sn)
+            if s:
+                es["sedi"].append(s["id"])
+            else:
+                es["senzaSede"].append(str(sn))
+        if tipo == "medico":
+            if not cat_dott:
+                es["azione"] = "manca la voce «Costi per dottori»"; esiti.append(es); continue
+            m = next((x for x in M if x.get("catId") == cat_dott["id"] and x.get("ref") == ref), None)
+            if m is None:
+                m = next((x for x in M if x.get("catId") == cat_dott["id"] and not x.get("ref") and _stesso_nome(x.get("name"), nome)), None)
+                if m is not None:
+                    es["azione"] = "collegato"
+                    if not prova:
+                        m["ref"] = ref; cambiato = True
+            if m is None:
+                es["azione"] = "nuovo"
+                if not prova:
+                    m = {"id": "msup_" + uuid.uuid4().hex[:10], "catId": cat_dott["id"], "name": nome, "sites": {}, "parked": {}, "ref": ref}
+                    M.append(m); cambiato = True
+            gia = (m or {}).get("sites") or {}
+            for sid in es["sedi"]:
+                if not gia.get(sid):
+                    es["nuove"].append(sid)
+                    if not prova and m is not None:
+                        m.setdefault("sites", {})[sid] = True; cambiato = True
+        else:
+            if not cat_stip:
+                es["azione"] = "manca la categoria «Stipendi»"; esiti.append(es); continue
+            nuovo_tutto = True
+            for sid in es["sedi"]:
+                it = next((x for x in items if x.get("catId") == cat_stip["id"] and x.get("siteId") == sid and x.get("ref") == ref), None)
+                if it is None:
+                    it = next((x for x in items if x.get("catId") == cat_stip["id"] and x.get("siteId") == sid and not x.get("ref") and _stesso_nome(x.get("name"), nome)), None)
+                    if it is not None:
+                        nuovo_tutto = False
+                        if es["azione"] == "presente": es["azione"] = "collegato"
+                        if not prova:
+                            it["ref"] = ref; cambiato = True
+                else:
+                    nuovo_tutto = False
+                if it is None:
+                    es["nuove"].append(sid)
+                    if not prova:
+                        iid = "fitem_" + uuid.uuid4().hex[:10]
+                        items.append({"id": iid, "catId": cat_stip["id"], "name": nome, "siteId": sid, "ref": ref})
+                        for bg in (d.get("budget"), d.get("nextYearBudget"), d.get("_budgetLiveBackup")):
+                            if isinstance(bg, dict):
+                                bg.setdefault("fixed", {})[iid] = {s["id"]: 0 for s in sites}
+                        d.setdefault("consuntivo", {}).setdefault("fixed", {})[iid] = {s["id"]: [0] * 12 for s in sites}
+                        cambiato = True
+            if es["nuove"] and nuovo_tutto:
+                es["azione"] = "nuovo"
+        nomi = {s["id"]: s.get("name") for s in sites}
+        es["sedi"] = [nomi.get(x, x) for x in es["sedi"]]
+        es["nuove"] = [nomi.get(x, x) for x in es["nuove"]]
+        esiti.append(es)
+    if cambiato and not prova:
+        salva_versione(db, cid, row["data"], "prima delle persone registrate nelle app", forza=True)
+        db.execute("UPDATE companies SET data=?, rev=? WHERE id=?", (json.dumps(d), (row["rev"] or 0) + 1, cid))
+        db.commit()
+    return jsonify({"ok": True, "prova": prova, "scritto": bool(cambiato and not prova), "esiti": esiti})
+
+
 @app.route("/api/_trasloco/export", methods=["GET"])
 def _trasloco_export():
     if not _trasloco_chiave_ok(request):

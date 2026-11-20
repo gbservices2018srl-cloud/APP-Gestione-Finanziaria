@@ -3815,8 +3815,9 @@ mb+='<td><button class="small-btn" data-role="mdel" data-mid="'+m.id+'">elimina<
 });
 mt.innerHTML='<thead>'+mh+'</thead><tbody>'+mb+'</tbody>';
 mw.appendChild(mt); mg.appendChild(mw);
-var addM=el('button','small-btn','+ aggiungi fornitore'); addM.style.marginTop='6px';
-addM.onclick=function(){ addSupplierMaster(c.id,'Nuovo fornitore',[siteId]); openDetailsState[detKey]=true; openDetailsState[mgrKey]=true; render(); };
+var isDott=/dottor|medic/i.test(c.name||'');
+var addM=el('button','small-btn', isDott ? '+ aggiungi medico' : '+ aggiungi fornitore'); addM.style.marginTop='6px';
+addM.onclick=function(){ addSupplierMaster(c.id, isDott ? 'Nuovo medico' : 'Nuovo fornitore',[siteId]); openDetailsState[detKey]=true; openDetailsState[mgrKey]=true; render(); };
 mg.appendChild(addM);
 mt.querySelectorAll('input[data-role=mname]').forEach(function(inp){
 inp.addEventListener('input',function(){ renameSupplierMaster(inp.dataset.mid,inp.value); });
