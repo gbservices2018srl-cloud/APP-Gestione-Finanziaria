@@ -697,7 +697,7 @@ function pConsuntivo(S) {
     <div class="table-scroll" style="max-height:none"><table class="dt"><thead><tr><th>Voce</th><th>Consuntivo</th><th class="l">Area</th><th class="c">Natura</th><th>Budget annuo</th><th></th></tr></thead><tbody>
     ${nuove.map(v => { const x = valCons(c, v.id), sug = S.f ? x / S.f : x; return `<tr class="nuova"><td><span class="vd">${esc(v.descr)}</span><span class="cod">${esc(v.codice)}</span></td><td>${eur(x)}</td>
       <td class="l">${selArea(v)}</td><td class="c">${fvSel(v)}</td><td><input inputmode="decimal" data-nuova-b="${esc(v.id)}" value="${esc(nf0.format(Math.round(sug)))}" ${ME.admin ? '' : 'disabled'}></td>
-      <td>${ME.admin ? `<button class="btn small primary" data-aggiungi="${esc(v.id)}">${ic('plus')}Aggiungi al budget</button>` : ''}</td></tr>`; }).join('')}
+      <td>${ME.admin ? `<span style="display:inline-flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn small primary" data-aggiungi="${esc(v.id)}">${ic('plus')}Aggiungi al budget</button><button class="btn small" data-escludi="${esc(v.id)}" title="Non va nel budget e non compare più tra le voci nuove">Escludi la voce</button></span>` : ''}</td></tr>`; }).join('')}
     </tbody></table></div>${ME.admin && nuove.length > 1 ? `<div class="row" style="margin-top:10px"><button class="btn small" data-aggiungi-tutte>Aggiungile tutte con l'importo proposto</button></div>` : ''}</div>` : ''}
   ${S.cons ? `<h2 style="font-family:var(--font-brand);color:var(--navy);font-size:16px;margin:18px 0 10px">Indicatori al ${dIt(c.al)}</h2>${kpi(S.cons, S.budAl, `budget al ${dIt(c.al)}`)}
   <div class="card" style="margin-top:18px"><h2>Voci del consuntivo</h2>
@@ -1003,6 +1003,7 @@ document.addEventListener('click', e => {
   if (t.hasAttribute('data-proponi')) { for (const v of voci()) if (AREA[v.area]?.natura && !v.natura) v.natura = proponi(v).natura || 'F'; salva(); toast('Proposte applicate: controllale.'); return render(); }
   const aggiungi = id => { const v = D.voci[id]; const inp = document.querySelector(`[data-nuova-b="${CSS.escape(id)}"]`); D.budget.righe[id] = { metodo: 'importo', valore: num(inp?.value) }; v.nuova = false; };
   if (d.aggiungi) { aggiungi(d.aggiungi); salva(); toast('Aggiunta al budget.'); return render(); }
+  if (d.escludi) { const v = D.voci[d.escludi]; if (!v) return; v.nuova = false; v.esclusa = true; delete D.budget.righe[d.escludi]; salva(); toast(`«${v.descr}» esclusa: non va nel budget.`); return render(); }
   if (t.hasAttribute('data-nuova-voce')) { NV = { area: 'amministrativi', natura: 'F' }; render(); return setTimeout(() => $('#nv-descr')?.focus()); }
   if (t.hasAttribute('data-annulla-voce')) { NV = null; return render(); }
   if (t.hasAttribute('data-salva-voce')) {
