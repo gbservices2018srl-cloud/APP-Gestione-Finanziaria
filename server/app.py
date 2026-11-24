@@ -866,6 +866,16 @@ def company_save_data():
         return jsonify({"error": "I dati sono stati modificati da un'altra finestra o da un altro dispositivo.", "conflict": True, "rev": rev}), 409
     plan = row["plan"] or "free"
     incoming = merge_gated_data(body["data"], row["data"], plan)
+    # registro di AlfaDocs (quali caselle ha scritto e quali sono bloccate): lo gestisce solo il server
+    try:
+        esistente = json.loads(row["data"] or "{}").get("alfadocs")
+        if isinstance(incoming, dict):
+            if esistente is not None:
+                incoming["alfadocs"] = esistente
+            else:
+                incoming.pop("alfadocs", None)
+    except Exception:
+        pass
     salva_versione(db, session["company_id"], row["data"])
     db.execute(
         "UPDATE companies SET data=?, rev=? WHERE id=?",
@@ -1214,6 +1224,110 @@ def appgestione_produzione():
     db.execute("UPDATE companies SET data=?, rev=? WHERE id=?", (json.dumps(d), rev + 1, cid))
     db.commit()
     return jsonify({"ok": True, "prima": prima, "dopo": valore})
+
+
+# AlfaDocs → Consuntivo: incassato (= fatturato) e produzione di ogni sede, SOLO nel mese indicato.
+# Salva prima una copia nello storico versioni. Se in una casella c'era un numero scritto a mano diverso, lo segnala.
+# Una casella «rimessa a mano» (bloccata) non viene più sovrascritta in quel mese.
+@app.route("/api/_appgestione/alfadocs", methods=["POST"])
+def appgestione_alfadocs():
+    if not _chiave_app_ok():
+        return json_error("Non autorizzato.", 401)
+    body = request.get_json(force=True, silent=True) or {}
+    cid = str(body.get("azienda") or "")
+    try:
+        anno = int(body.get("anno") or 0)
+        mese = int(body.get("mese") or 0)
+    except (TypeError, ValueError):
+        return json_error("Dati non validi.", 400)
+    if not 1 <= mese <= 12:
+        return json_error("Mese non valido.", 400)
+    db = get_db()
+    row = db.execute("SELECT data, rev FROM companies WHERE id=?", (cid,)).fetchone()
+    if row is None:
+        return json_error("Azienda non trovata.", 404)
+    d = json.loads(row["data"] or "{}")
+    if d.get("currentYear") != anno:
+        return json_error("Nella Gestione finanziaria il consuntivo aperto è del %s, non del %s." % (d.get("currentYear"), anno), 409)
+    ids = {s.get("id") for s in d.get("sites") or []}
+    cons = d.setdefault("consuntivo", {})
+    reg = d.setdefault("alfadocs", {}).setdefault("%04d-%02d" % (anno, mese), {})
+    esiti, differenze, cambiato = [], [], False
+    for x in body.get("sedi") or []:
+        sid = str(x.get("sedeId") or "")
+        if sid not in ids:
+            esiti.append({"sedeId": sid, "errore": "sede non trovata"})
+            continue
+        r = reg.setdefault(sid, {})
+        es = {"sedeId": sid}
+        for campo in ("revenue", "produzione"):
+            v = x.get("incassato" if campo == "revenue" else "produzione")
+            if v is None:
+                continue
+            try:
+                v = round(float(v), 2)
+            except (TypeError, ValueError):
+                continue
+            if v < 0 or v > 100000000:
+                continue
+            if r.get(campo + "_bloccato"):
+                es[campo] = {"bloccato": True, "alfadocs": v}
+                continue
+            arr = list((cons.setdefault(campo, {})).get(sid) or [])
+            while len(arr) < 12:
+                arr.append(0)
+            prima = _num(arr[mese - 1])
+            ultimo = r.get(campo)
+            # numero scritto a mano: diverso da quello che aveva messo AlfaDocs l'ultima volta (o, la prima volta, già presente)
+            a_mano = (ultimo is None and prima != 0) or (ultimo is not None and abs(prima - float(ultimo)) >= 0.01)
+            if a_mano and abs(prima - v) >= 1:
+                differenze.append({"sedeId": sid, "campo": campo, "prima": prima, "alfadocs": v})
+            if abs(prima - v) >= 0.005:
+                arr[mese - 1] = v
+                cons[campo][sid] = arr
+                cambiato = True
+            r[campo] = v
+            r[campo + "_il"] = now_iso()
+            es[campo] = {"prima": prima, "dopo": v}
+        esiti.append(es)
+    if cambiato:
+        salva_versione(db, cid, row["data"], "prima dell'aggiornamento da AlfaDocs", forza=True)
+    db.execute("UPDATE companies SET data=?, rev=? WHERE id=?", (json.dumps(d), (row["rev"] or 0) + (1 if cambiato else 0), cid))
+    db.commit()
+    return jsonify({"ok": True, "esiti": esiti, "differenze": differenze, "cambiato": cambiato})
+
+
+# AlfaDocs: «rimetti il mio valore» in una casella (resta bloccata per quel mese: AlfaDocs non la sovrascrive più)
+@app.route("/api/_appgestione/alfadocs/ripristina", methods=["POST"])
+def appgestione_alfadocs_ripristina():
+    if not _chiave_app_ok():
+        return json_error("Non autorizzato.", 401)
+    body = request.get_json(force=True, silent=True) or {}
+    cid, sid, campo = str(body.get("azienda") or ""), str(body.get("sedeId") or ""), str(body.get("campo") or "")
+    try:
+        anno, mese, valore = int(body.get("anno")), int(body.get("mese")), round(float(body.get("valore")), 2)
+    except (TypeError, ValueError):
+        return json_error("Dati non validi.", 400)
+    if campo not in ("revenue", "produzione") or not 1 <= mese <= 12 or valore < 0:
+        return json_error("Dati non validi.", 400)
+    db = get_db()
+    row = db.execute("SELECT data, rev FROM companies WHERE id=?", (cid,)).fetchone()
+    if row is None:
+        return json_error("Azienda non trovata.", 404)
+    d = json.loads(row["data"] or "{}")
+    if d.get("currentYear") != anno or not any(s.get("id") == sid for s in d.get("sites") or []):
+        return json_error("Sede o anno non validi.", 409)
+    arr = list(((d.setdefault("consuntivo", {})).setdefault(campo, {})).get(sid) or [])
+    while len(arr) < 12:
+        arr.append(0)
+    arr[mese - 1] = valore
+    d["consuntivo"][campo][sid] = arr
+    r = d.setdefault("alfadocs", {}).setdefault("%04d-%02d" % (anno, mese), {}).setdefault(sid, {})
+    r[campo + "_bloccato"] = True
+    salva_versione(db, cid, row["data"], "prima di rimettere il valore a mano (AlfaDocs)", forza=True)
+    db.execute("UPDATE companies SET data=?, rev=? WHERE id=?", (json.dumps(d), (row["rev"] or 0) + 1, cid))
+    db.commit()
+    return jsonify({"ok": True})
 
 
 # REC · Pannello cassa: le spese di cassa (uscite) si aggiungono alla voce del Consuntivo della sede, nel loro mese.

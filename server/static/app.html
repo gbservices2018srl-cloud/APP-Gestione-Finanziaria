@@ -3452,6 +3452,14 @@ renderConsuntivoTotale(main);
 renderConsuntivoSite(main, currentConsuntivoSite);
 }
 };
+// casella aggiornata da AlfaDocs (registro tenuto dal server): piccolo segno sotto il numero
+function tagAlfaDocs(campo, siteId, m){
+var reg = STATE && STATE.alfadocs, k = (STATE && STATE.currentYear) + '-' + String(m+1).padStart(2,'0');
+var r = reg && reg[k] && reg[k][siteId];
+if(!r || r[campo]==null) return '';
+return r[campo+'_bloccato'] ? '<div style="font-size:9.5px;font-weight:700;color:#8a6d00;margin-top:2px" title="Valore rimesso a mano: AlfaDocs non lo cambia in questo mese">a mano</div>'
+  : '<div style="font-size:9.5px;font-weight:800;color:#2b8a83;margin-top:2px" title="Aggiornato in automatico da AlfaDocs">AlfaDocs</div>';
+}
 function renderConsuntivoSite(main, siteId){
 var site = findSite(siteId);
 var mc = mesiCompilati(siteId);
@@ -3462,7 +3470,7 @@ var t0 = document.createElement('table'); t0.className='datatable';
 var h0 = '<tr><th>Voce</th>'+MONTHS_SHORT.map(function(m){return '<th>'+m+'</th>';}).join('')+'<th>Totale</th></tr>';
 var revArr = STATE.consuntivo.revenue[siteId] || (STATE.consuntivo.revenue[siteId]=MONTHS.map(function(){return 0;}));
 var tds0 = '<td>Tot. fatturato incassato</td>';
-for(var m=0;m<12;m++){ tds0 += '<td><span class="money-cell"><input type="number" data-m="'+m+'" value="'+(revArr[m]||'')+'"/></span></td>'; }
+for(var m=0;m<12;m++){ tds0 += '<td><span class="money-cell"><input type="number" data-m="'+m+'" value="'+(revArr[m]||'')+'"/></span>'+tagAlfaDocs('revenue',siteId,m)+'</td>'; }
 tds0 += '<td id="rowtot_rev_'+siteId+'"><b>'+fmtEUR(sum(revArr))+'</b></td>';
 t0.innerHTML = '<thead>'+h0+'</thead><tbody><tr>'+tds0+'</tr></tbody>';
 wrap0.appendChild(t0); card0.appendChild(wrap0);
@@ -3484,7 +3492,7 @@ var tP = document.createElement('table'); tP.className='datatable';
 var hP = '<tr><th>Voce</th>'+MONTHS_SHORT.map(function(m){return '<th>'+m+'</th>';}).join('')+'<th>Totale</th></tr>';
 var prodArr = STATE.consuntivo.produzione[siteId] || (STATE.consuntivo.produzione[siteId]=MONTHS.map(function(){return 0;}));
 var tdsP = '<td>Valore produzione</td>';
-for(var mp=0;mp<12;mp++){ tdsP += '<td><span class="money-cell"><input type="number" data-m="'+mp+'" value="'+(prodArr[mp]||'')+'"/></span></td>'; }
+for(var mp=0;mp<12;mp++){ tdsP += '<td><span class="money-cell"><input type="number" data-m="'+mp+'" value="'+(prodArr[mp]||'')+'"/></span>'+tagAlfaDocs('produzione',siteId,mp)+'</td>'; }
 tdsP += '<td id="rowtot_prod_'+siteId+'"><b>'+fmtEUR(sum(prodArr))+'</b></td>';
 tP.innerHTML = '<thead>'+hP+'</thead><tbody><tr>'+tdsP+'</tr></tbody>';
 wrapP.appendChild(tP); cardProd.appendChild(wrapP);
