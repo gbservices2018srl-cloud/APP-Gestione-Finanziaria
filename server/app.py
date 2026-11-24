@@ -658,6 +658,30 @@ def suite_persona_aziende(uid):
 
 
 # =============================================================== COMPANY
+@app.route("/_suite/entra", methods=["GET"])
+def suite_entra():
+    """Un cliente della suite arriva dalla sua pagina «Le mie app» con un codice monouso: entra nella sua azienda senza seconda password."""
+    codice = (request.args.get("c") or "").strip()
+    if not codice or not sso_enabled():
+        return redirect("/")
+    code, data = sso_call("/api/_suite/finanza-ticket", {"codice": codice})
+    if code != 200 or not data.get("company_id"):
+        return redirect("/")
+    row = get_db().execute("SELECT id, approved FROM companies WHERE id=?", (data["company_id"],)).fetchone()
+    if row is None or not row["approved"]:
+        return redirect("/")
+    session.clear()
+    session.permanent = True
+    session["role"] = "company"
+    session["company_id"] = row["id"]
+    session["suite_home"] = data.get("home") or SSO_URL
+    session["suite_utente"] = (data.get("utente") or {}).get("email") or ""
+    ok, _err = check_company_access()
+    if not ok:
+        return redirect("/")
+    return redirect("/bilancio" if data.get("pagina") == "bilancio" else "/")
+
+
 @app.route("/api/sso/status", methods=["GET"])
 def sso_status():
     """Per la pagina di accesso: la persona e' gia' collegata ad appgestione.it? Quali aziende puo' aprire?"""
@@ -802,7 +826,8 @@ def company_me():
         session.clear()
         return jsonify({"loggedIn": False})
     return jsonify({"loggedIn": True, "name": row["name"], "plan": row["plan"] or "free", "scadenza": (row["expires_at"] or "")[:10] or None,
-                    "sso": bool(session.get("sso_uid")), "ssoHome": SSO_URL if session.get("sso_uid") else None})
+                    "sso": bool(session.get("sso_uid") or session.get("suite_home")),
+                    "ssoHome": session.get("suite_home") or (SSO_URL if session.get("sso_uid") else None)})
 
 
 @app.route("/api/company/data", methods=["GET"])
