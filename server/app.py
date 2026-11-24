@@ -2220,6 +2220,48 @@ def _diag_sardara():
 
 _diag_sardara()
 
+
+def _diag_elmas_e_nomi():
+    try:
+        db = sqlite3.connect(DB_PATH); db.row_factory = sqlite3.Row
+        full = db.execute("SELECT id FROM companies WHERE id LIKE 'cd1ac58f%'").fetchone()
+        if not full: return
+        cid = full["id"]
+        def percorsi(o, path, out):
+            if isinstance(o, dict):
+                for k, v in o.items(): percorsi(v, path + [str(k)], out)
+            elif isinstance(o, list):
+                for v in o: percorsi(v, path + ["#"], out)
+            elif isinstance(o, str):
+                low = o.lower()
+                for c in ("largiu", "atzeni", " olla", "olla "):
+                    if c in low and "collabor" not in low:
+                        out.add("%s@%s" % (c.strip(), "/".join(p for p in path if not p.startswith(("fitem_", "msup_", "site_", "cat_")))[:80]))
+        def elmas(d, tag):
+            sid = next((x.get("id") for x in d.get("sites") or [] if (x.get("name") or "").strip().upper() == "ELMAS"), None)
+            cats = {c.get("id"): c.get("name") for c in d.get("varCats") or []}
+            out = []
+            for cid_, per in ((d.get("consuntivo") or {}).get("varCat") or {}).items():
+                e = (per or {}).get(sid)
+                if not isinstance(e, dict): continue
+                sups = e.get("suppliers") or []
+                tot = sum(float(x or 0) for x in e.get("total") or []) + sum(float(x or 0) for sp in sups for x in sp.get("values") or [])
+                if tot or sups:
+                    out.append("%s: righe=%d piene=%d totale=%.2f" % (cats.get(cid_), len(sups), sum(1 for sp in sups if any(float(x or 0) for x in sp.get("values") or [])), tot))
+            return out
+        for v in db.execute("SELECT id, saved_at, data FROM company_versions WHERE company_id=? ORDER BY id", (cid,)):
+            d = json.loads(_decomprimi(v["data"]))
+            nomi = set(); percorsi(d, [], nomi)
+            print("DIAG elmas copia%d %s: %s || nomi: %s" % (v["id"], v["saved_at"][:16], " ; ".join(elmas(d, "")), " | ".join(sorted(nomi)) or "-"), flush=True)
+        d = json.loads(db.execute("SELECT data FROM companies WHERE id=?", (cid,)).fetchone()["data"] or "{}")
+        print("DIAG elmas ADESSO: %s" % " ; ".join(elmas(d, "")), flush=True)
+        db.close()
+    except Exception as e:
+        print("DIAG elmas errore", e, flush=True)
+
+
+_diag_elmas_e_nomi()
+
 # App di bilancio (Controllo di gestione): pagina /bilancio e API /api/bilancio/... nello stesso servizio
 import bilancio_api
 bilancio_api.registra(app, {
