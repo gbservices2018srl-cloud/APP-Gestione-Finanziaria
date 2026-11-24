@@ -1184,48 +1184,6 @@ def appgestione_consuntivo():
                     "voceMateriale": cat_mat.get("name") if cat_mat else None, "sedi": sedi, "direzione": direzione})
 
 
-# REC · Produzione di UL: scrive SOLO la produzione di una sede in un mese del Consuntivo (dopo l'approvazione in REC).
-# Salva prima la versione precedente e aumenta "rev": una finestra della Gestione finanziaria già aperta non sovrascrive
-# questo valore, al salvataggio chiede di ricaricare.
-@app.route("/api/_appgestione/produzione", methods=["POST"])
-def appgestione_produzione():
-    if not _chiave_app_ok():
-        return json_error("Non autorizzato.", 401)
-    body = request.get_json(force=True, silent=True) or {}
-    cid = str(body.get("azienda") or "")
-    sid = str(body.get("sedeId") or "")
-    try:
-        anno = int(body.get("anno") or 0)
-        mese = int(body.get("mese") or 0)
-        valore = round(float(body.get("valore")), 2)
-    except (TypeError, ValueError):
-        return json_error("Dati non validi.", 400)
-    if not 1 <= mese <= 12 or valore < 0 or valore > 100000000:
-        return json_error("Dati non validi.", 400)
-    db = get_db()
-    row = db.execute("SELECT data, rev FROM companies WHERE id=?", (cid,)).fetchone()
-    if row is None:
-        return json_error("Azienda non trovata.", 404)
-    d = json.loads(row["data"] or "{}")
-    if d.get("currentYear") != anno:
-        return json_error("Nella Gestione finanziaria il consuntivo aperto è del %s, non del %s." % (d.get("currentYear"), anno), 409)
-    if not any(s.get("id") == sid for s in d.get("sites") or []):
-        return json_error("Sede non trovata nella Gestione finanziaria.", 404)
-    cons = d.setdefault("consuntivo", {})
-    prod = cons.setdefault("produzione", {})
-    arr = list(prod.get(sid) or [])
-    while len(arr) < 12:
-        arr.append(0)
-    prima = _num(arr[mese - 1])
-    arr[mese - 1] = valore
-    prod[sid] = arr
-    rev = row["rev"] or 0
-    salva_versione(db, cid, row["data"], "prima della produzione da REC", forza=True)
-    db.execute("UPDATE companies SET data=?, rev=? WHERE id=?", (json.dumps(d), rev + 1, cid))
-    db.commit()
-    return jsonify({"ok": True, "prima": prima, "dopo": valore})
-
-
 # AlfaDocs → Consuntivo: incassato (= fatturato) e produzione di ogni sede, SOLO nel mese indicato.
 # Salva prima una copia nello storico versioni. Se in una casella c'era un numero scritto a mano diverso, lo segnala.
 # Una casella «rimessa a mano» (bloccata) non viene più sovrascritta in quel mese.
