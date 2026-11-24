@@ -2130,6 +2130,42 @@ def _diag_copie():
 
 _diag_copie()
 
+
+# Ricerca in sola lettura in TUTTE le aziende e nell'app di bilancio: in quali punti compaiono i cognomi indicati (nessun importo)
+def _diag_cerca_ovunque():
+    try:
+        db = sqlite3.connect(DB_PATH); db.row_factory = sqlite3.Row
+        chi = ("olla", "atzeni", "largiu")
+        def percorsi(o, path, out):
+            if isinstance(o, dict):
+                for k, v in o.items():
+                    percorsi(v, path + [str(k)], out)
+            elif isinstance(o, list):
+                for i, v in enumerate(o):
+                    percorsi(v, path + ["#"], out)
+            elif isinstance(o, str):
+                low = o.lower()
+                for c in chi:
+                    if c in low:
+                        out.add("%s@%s" % (c, "/".join(p for p in path if not p.startswith(("fitem_", "msup_", "site_")))[:90]))
+        for r in db.execute("SELECT id, name FROM companies"):
+            out = set()
+            percorsi(json.loads(db.execute("SELECT data FROM companies WHERE id=?", (r["id"],)).fetchone()["data"] or "{}"), [], out)
+            print("DIAG azienda %s (%s): %s" % (r["id"][:8], r["name"], " | ".join(sorted(out))[:900] or "nessuno"), flush=True)
+        try:
+            for r in db.execute("SELECT company_id, versione, aggiornato_il FROM bilancio"):
+                out = set()
+                percorsi(json.loads(db.execute("SELECT data FROM bilancio WHERE company_id=?", (r["company_id"],)).fetchone()["data"] or "{}"), [], out)
+                print("DIAG bilancio %s v%s %s: %s" % (r["company_id"][:8], r["versione"], r["aggiornato_il"], " | ".join(sorted(out))[:900] or "nessuno"), flush=True)
+        except Exception as e:
+            print("DIAG bilancio errore", e, flush=True)
+        db.close()
+    except Exception as e:
+        print("DIAG ovunque errore", e, flush=True)
+
+
+_diag_cerca_ovunque()
+
 # App di bilancio (Controllo di gestione): pagina /bilancio e API /api/bilancio/... nello stesso servizio
 import bilancio_api
 bilancio_api.registra(app, {
