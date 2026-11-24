@@ -14,6 +14,7 @@ Avvio in locale:
     python app.py
 Il server parte su http://127.0.0.1:5000
 """
+import hmac
 import os
 import re
 import json
@@ -1489,7 +1490,7 @@ def _manutenzione():
 def _chiave_app_ok():
     k = os.environ.get("SSO_API_KEY", "")
     h = request.headers.get("Authorization", "")
-    return bool(k) and h == "Bearer " + k
+    return bool(k) and hmac.compare_digest(h.encode(), ("Bearer " + k).encode())
 
 
 @app.route("/api/_appgestione/aziende", methods=["GET"])
