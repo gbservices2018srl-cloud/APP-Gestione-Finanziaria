@@ -822,6 +822,184 @@ def admin_view_company_data(cid):
     return jsonify({"data": json.loads(row["data"])})
 
 
+# ================================================================ SUITE (appgestione.it/gestione)
+# Le aziende si gestiscono dal pannello della suite: qui solo le chiamate tra i due servizi,
+# protette dalla chiave condivisa SSO_API_KEY. Nessuna di queste cancella dati.
+def _suite_ok():
+    k = os.environ.get("SSO_API_KEY", "")
+    h = request.headers.get("Authorization", "")
+    return bool(k) and hmac.compare_digest(h.encode(), ("Bearer " + k).encode())
+
+
+def _azienda_dict(r, gruppo):
+    d = dict(r)
+    d["suspended"] = bool(d.get("suspended"))
+    d["approved"] = bool(d.get("approved"))
+    d["gruppo"] = d["id"] in gruppo
+    return d
+
+
+@app.route("/api/_suite/aziende", methods=["GET"])
+def suite_aziende():
+    if not _suite_ok():
+        return json_error("Non autorizzato.", 401)
+    db = get_db()
+    gruppo = {r["company_id"] for r in db.execute("SELECT DISTINCT company_id FROM sso_company_links").fetchall()}
+    rows = db.execute("SELECT id, name, email, phone, created_at, suspended, expires_at, plan, approved FROM companies ORDER BY name").fetchall()
+    return jsonify({"aziende": [_azienda_dict(r, gruppo) for r in rows]})
+
+
+@app.route("/api/_suite/aziende", methods=["POST"])
+def suite_crea_azienda():
+    if not _suite_ok():
+        return json_error("Non autorizzato.", 401)
+    body = request.get_json(force=True, silent=True) or {}
+    name = (body.get("name") or "").strip()[:120]
+    if len(name) < 2:
+        return json_error("Il nome dell'azienda e' obbligatorio.")
+    db = get_db()
+    if db.execute("SELECT 1 FROM companies WHERE LOWER(TRIM(name))=LOWER(?)", (name,)).fetchone():
+        return json_error("Esiste gia' un'azienda con questo nome in Gestione finanziaria.", 409)
+    password = secrets.token_urlsafe(9)
+    cid = uuid.uuid4().hex[:12]
+    db.execute(
+        "INSERT INTO companies (id, name, email, phone, password_hash, created_at, data, suspended, expires_at, plan, approved) "
+        "VALUES (?,?,?,?,?,?,?,0,?,'pro',1)",
+        (cid, name, (body.get("email") or "").strip() or None, (body.get("phone") or "").strip() or None,
+         generate_password_hash(password), now_iso(), "{}", body.get("expires_at") or None))
+    db.commit()
+    return jsonify({"id": cid, "name": name, "password": password})
+
+
+@app.route("/api/_suite/aziende/<cid>", methods=["PATCH"])
+def suite_aggiorna_azienda(cid):
+    if not _suite_ok():
+        return json_error("Non autorizzato.", 401)
+    body = request.get_json(force=True, silent=True) or {}
+    db = get_db()
+    if db.execute("SELECT 1 FROM companies WHERE id=?", (cid,)).fetchone() is None:
+        return json_error("Azienda non trovata.", 404)
+    out = {"ok": True}
+    if "name" in body:
+        n = (body.get("name") or "").strip()[:120]
+        if len(n) < 2:
+            return json_error("Il nome non puo' essere vuoto.")
+        db.execute("UPDATE companies SET name=? WHERE id=?", (n, cid))
+    if "email" in body:
+        e = (body.get("email") or "").strip() or None
+        if e and "@" not in e:
+            return json_error("Indirizzo email non valido.")
+        db.execute("UPDATE companies SET email=? WHERE id=?", (e, cid))
+    if "phone" in body:
+        db.execute("UPDATE companies SET phone=? WHERE id=?", ((body.get("phone") or "").strip() or None, cid))
+    if "suspended" in body:
+        db.execute("UPDATE companies SET suspended=? WHERE id=?", (1 if body.get("suspended") else 0, cid))
+    if "expires_at" in body:
+        db.execute("UPDATE companies SET expires_at=? WHERE id=?", (body.get("expires_at") or None, cid))
+    if body.get("plan") in ("free", "pro"):
+        db.execute("UPDATE companies SET plan=? WHERE id=?", (body["plan"], cid))
+    if body.get("approva"):
+        db.execute("UPDATE companies SET approved=1 WHERE id=?", (cid,))
+    if body.get("nuova_password"):
+        pw = secrets.token_urlsafe(9)
+        db.execute("UPDATE companies SET password_hash=? WHERE id=?", (generate_password_hash(pw), cid))
+        db.execute("UPDATE password_reset_requests SET resolved=1 WHERE company_id=?", (cid,))
+        out["password"] = pw
+    db.commit()
+    return jsonify(out)
+
+
+@app.route("/api/_suite/aziende/<cid>/versioni", methods=["GET"])
+def suite_versioni(cid):
+    if not _suite_ok():
+        return json_error("Non autorizzato.", 401)
+    rows = get_db().execute("SELECT id, saved_at, motivo, length(data) AS dim FROM company_versions WHERE company_id=? ORDER BY id DESC LIMIT 300", (cid,)).fetchall()
+    return jsonify({"versioni": [dict(r) for r in rows]})
+
+
+@app.route("/api/_suite/aziende/<cid>/versioni/<int:vid>", methods=["GET"])
+def suite_versione_scarica(cid, vid):
+    if not _suite_ok():
+        return json_error("Non autorizzato.", 401)
+    row = get_db().execute("SELECT saved_at, data FROM company_versions WHERE id=? AND company_id=?", (vid, cid)).fetchone()
+    if row is None:
+        return json_error("Versione non trovata.", 404)
+    from flask import Response
+    return Response(_decomprimi(row["data"]), mimetype="application/json",
+                    headers={"Content-Disposition": 'attachment; filename="versione_%s_%s.json"' % (cid[:8], row["saved_at"][:16].replace(":", "-"))})
+
+
+@app.route("/api/_suite/aziende/<cid>/versioni/<int:vid>/ripristina", methods=["POST"])
+def suite_versione_ripristina(cid, vid):
+    if not _suite_ok():
+        return json_error("Non autorizzato.", 401)
+    db = get_db()
+    v = db.execute("SELECT data FROM company_versions WHERE id=? AND company_id=?", (vid, cid)).fetchone()
+    cur = db.execute("SELECT data FROM companies WHERE id=?", (cid,)).fetchone()
+    if v is None or cur is None:
+        return json_error("Versione non trovata.", 404)
+    testo = _decomprimi(v["data"])
+    json.loads(testo)
+    # i dati di adesso restano nello storico: il ripristino si puo' sempre annullare
+    salva_versione(db, cid, cur["data"], "prima del ripristino", forza=True)
+    db.execute("UPDATE companies SET data=?, rev=rev+1 WHERE id=?", (testo, cid))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/_suite/richieste-password", methods=["GET"])
+def suite_richieste_password():
+    if not _suite_ok():
+        return json_error("Non autorizzato.", 401)
+    rows = get_db().execute("SELECT id, company_id, company_name, requested_at FROM password_reset_requests WHERE resolved=0 ORDER BY requested_at").fetchall()
+    return jsonify({"richieste": [dict(r) for r in rows]})
+
+
+@app.route("/api/_suite/richieste-password/<rid>", methods=["POST"])
+def suite_richiesta_password_gestita(rid):
+    if not _suite_ok():
+        return json_error("Non autorizzato.", 401)
+    db = get_db()
+    db.execute("UPDATE password_reset_requests SET resolved=1 WHERE id=?", (rid,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/_suite/persone", methods=["GET"])
+def suite_persone():
+    """Persone del gruppo abilitate a Finanza (o all'App di bilancio), con le aziende che vedono."""
+    if not _suite_ok():
+        return json_error("Non autorizzato.", 401)
+    users = []
+    for app_id in ("finanza", "bilancio"):
+        code, data = sso_call("/api/sso/users", {"app": app_id})
+        if code != 200:
+            return json_error("Accesso unico non raggiungibile, riprova tra poco.", 502)
+        visti = {u["id"] for u in users}
+        users += [u for u in data.get("users", []) if u["id"] not in visti]
+    links = {}
+    for r in get_db().execute("SELECT sso_user_id, company_id FROM sso_company_links").fetchall():
+        links.setdefault(r["sso_user_id"], []).append(r["company_id"])
+    return jsonify({"persone": [{"id": u["id"], "nome": (u.get("firstName", "") + " " + u.get("lastName", "")).strip(), "email": u.get("email"),
+                                 "aziende": links.get(u["id"], [])} for u in users]})
+
+
+@app.route("/api/_suite/persone/<uid>", methods=["PUT"])
+def suite_persona_aziende(uid):
+    if not _suite_ok():
+        return json_error("Non autorizzato.", 401)
+    body = request.get_json(force=True, silent=True) or {}
+    ids = [str(x) for x in (body.get("aziende") or [])][:200]
+    db = get_db()
+    valid = {r["id"] for r in db.execute("SELECT id FROM companies").fetchall()}
+    db.execute("DELETE FROM sso_company_links WHERE sso_user_id=?", (uid[:64],))
+    for cid in ids:
+        if cid in valid:
+            db.execute("INSERT OR IGNORE INTO sso_company_links (sso_user_id, company_id) VALUES (?,?)", (uid[:64], cid))
+    db.commit()
+    return jsonify({"ok": True, "aziende": [c for c in ids if c in valid]})
+
+
 # =============================================================== COMPANY
 @app.route("/api/sso/status", methods=["GET"])
 def sso_status():
@@ -1208,11 +1386,11 @@ def company_me():
     if not ok:
         return jsonify({"loggedIn": False})
     db = get_db()
-    row = db.execute("SELECT name, plan FROM companies WHERE id=?", (session["company_id"],)).fetchone()
+    row = db.execute("SELECT name, plan, expires_at FROM companies WHERE id=?", (session["company_id"],)).fetchone()
     if row is None:
         session.clear()
         return jsonify({"loggedIn": False})
-    return jsonify({"loggedIn": True, "name": row["name"], "plan": row["plan"] or "free",
+    return jsonify({"loggedIn": True, "name": row["name"], "plan": row["plan"] or "free", "scadenza": (row["expires_at"] or "")[:10] or None,
                     "sso": bool(session.get("sso_uid")), "ssoHome": SSO_URL if session.get("sso_uid") else None})
 
 

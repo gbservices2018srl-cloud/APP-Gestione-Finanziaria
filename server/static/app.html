@@ -758,10 +758,23 @@ var data = null;
 try{ data = await res.json(); }catch(e){}
 return {ok:res.ok, status:res.status, data:data};
 }
+// abbonamento in scadenza (ultimi 15 giorni): avviso fisso in cima alla pagina
+function avvisoScadenza(d){
+var vecchio=document.getElementById('ts-scad'); if(vecchio) vecchio.remove();
+if(!d) return;
+var oggi=new Date(); oggi.setHours(0,0,0,0);
+var g=Math.round((new Date(d+'T00:00:00')-oggi)/86400000);
+if(isNaN(g)||g>15||g<0) return;
+var quando = g===0 ? 'scade oggi' : g===1 ? 'scade domani' : 'scade il '+d.split('-').reverse().join('/')+' (tra '+g+' giorni)';
+var b=document.createElement('div'); b.id='ts-scad'; b.setAttribute('role','status');
+b.style.cssText='position:sticky;top:0;z-index:99999;background:#fde4e1;color:#8f1d14;border-bottom:2px solid #b42318;padding:10px 16px;font:700 14px/1.35 system-ui,sans-serif;text-align:center';
+b.textContent='\u23F0 L\u2019abbonamento '+quando+'. Rinnova per non perdere l\u2019accesso: alla scadenza non potrai pi\u00f9 entrare (i dati restano conservati). Contatta To Smile.';
+document.body.insertBefore(b, document.body.firstChild);
+}
 async function checkSession(){
 try{
 var r = await apiGet('/api/company/me');
-if(r.ok && r.data && r.data.loggedIn){ companyPlan = r.data.plan || 'free'; ssoMode = !!r.data.sso; ssoHome = r.data.ssoHome || ''; return r.data.name; }
+if(r.ok && r.data && r.data.loggedIn){ companyPlan = r.data.plan || 'free'; ssoMode = !!r.data.sso; ssoHome = r.data.ssoHome || ''; avvisoScadenza(r.data.scadenza); return r.data.name; }
 }catch(e){}
 return null;
 }
@@ -771,6 +784,7 @@ try{
 var r = await apiSend('/api/company/login', 'POST', {name:name, password:password});
 if(!r.ok){ loginError = (r.data && r.data.error) || 'Nome azienda o password errati.'; loginBusy=false; render(); return false; }
 loginBusy = false;
+apiGet('/api/company/me').then(function(x){ if(x && x.ok && x.data) avvisoScadenza(x.data.scadenza); }).catch(function(){});
 await bootAfterLogin(r.data.name);
 return true;
 }catch(e){
