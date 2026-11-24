@@ -224,6 +224,8 @@ def registra(app, data_dir, db_path):
 
     if os.environ.get("BACKUP_NOTTURNO", "true") == "true":
         threading.Thread(target=pianifica, daemon=True).start()
+        if not leggi_stato("tosmile"):  # prima accensione: la prima copia si fa subito, senza aspettare la notte
+            threading.Timer(90, notte).start()
 
     @app.route("/api/_backup/stato", methods=["GET"])
     def backup_stato():
