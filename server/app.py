@@ -2072,6 +2072,33 @@ def _diag_copie():
                     print("DIAG copia %s errore %s" % (v["id"], e), flush=True)
             cur = db.execute("SELECT data FROM companies WHERE id=?", (cid,)).fetchone()
             print("DIAG ADESSO %s" % riassunto(json.loads(cur["data"] or "{}")), flush=True)
+            # dettaglio (solo sì/no e conteggi, nessun importo di persone): bozza anno prossimo, righe con «olla», righe tolte
+            def stati(d, tag):
+                sites = {x.get("id"): x.get("name") for x in d.get("sites") or []}
+                stip = next((c for c in d.get("fixedCats") or [] if re.search(r"stipend", c.get("name") or "", re.I)), None) or {}
+                def tot(bg):
+                    if not isinstance(bg, dict): return None
+                    f = bg.get("fixed") or {}
+                    return round(sum(float(v or 0) for i in f for v in (f.get(i) or {}).values()), 2)
+                print("DIAG %s inBozza=%s budget=%s bozza=%s backup=%s bozza_del=%s" % (tag, d.get("_editingNextYearBudget"), tot(d.get("budget")),
+                      tot(d.get("nextYearBudget")), tot(d.get("_budgetLiveBackup")), (d.get("nextYearBudget") or {}).get("createdAt") if isinstance(d.get("nextYearBudget"), dict) else None), flush=True)
+                cf = (d.get("consuntivo") or {}).get("fixed") or {}
+                for it in d.get("fixedItems") or []:
+                    if it.get("catId") == stip.get("id") and "olla" in (it.get("name") or "").lower():
+                        def nz(bg):
+                            return bool(isinstance(bg, dict) and any(float(v or 0) for v in ((bg.get("fixed") or {}).get(it.get("id")) or {}).values()))
+                        print("DIAG %s riga_olla sede=%s ref=%s budget=%s bozza=%s backup=%s consuntivo=%s" % (tag, sites.get(it.get("siteId"), "generale"), bool(it.get("ref")),
+                              nz(d.get("budget")), nz(d.get("nextYearBudget")), nz(d.get("_budgetLiveBackup")),
+                              any(float(x or 0) for v in (cf.get(it.get("id")) or {}).values() for x in (v or []))), flush=True)
+            vers = {v["id"]: v for v in db.execute("SELECT id, data FROM company_versions WHERE company_id=? AND id IN (43, 55, 57, 58, 70, 71)", (cid,))}
+            for k in sorted(vers):
+                stati(json.loads(_decomprimi(vers[k]["data"])), "copia%d" % k)
+            ora = json.loads(cur["data"] or "{}")
+            stati(ora, "ADESSO")
+            if 70 in vers:
+                v70 = json.loads(_decomprimi(vers[70]["data"]))
+                ids_ora = {x.get("id") for x in ora.get("fixedItems") or []}
+                print("DIAG righe di copia70 non più presenti adesso: %d" % sum(1 for x in v70.get("fixedItems") or [] if x.get("id") not in ids_ora), flush=True)
         db.close()
     except Exception as e:
         print("DIAG errore", e, flush=True)
