@@ -2190,6 +2190,36 @@ def _diag_backup_personale():
 
 _diag_backup_personale()
 
+
+def _diag_sardara():
+    try:
+        db = sqlite3.connect(DB_PATH); db.row_factory = sqlite3.Row
+        cid = "cd1ac58f"
+        full = db.execute("SELECT id FROM companies WHERE id LIKE ?", (cid + "%",)).fetchone()
+        if not full: return
+        cid = full["id"]
+        def righe(d, tag):
+            sid = next((x.get("id") for x in d.get("sites") or [] if (x.get("name") or "").strip().upper() == "SARDARA"), None)
+            stip = next((c for c in d.get("fixedCats") or [] if re.search(r"stipend", c.get("name") or "", re.I)), None) or {}
+            cf = (d.get("consuntivo") or {}).get("fixed") or {}
+            bf = (d.get("budget") or {}).get("fixed") or {}
+            out = []
+            for it in d.get("fixedItems") or []:
+                if it.get("catId") == stip.get("id") and it.get("siteId") == sid:
+                    c = any(float(x or 0) for x in ((cf.get(it.get("id")) or {}).get(sid) or []))
+                    b = bool(float(((bf.get(it.get("id")) or {}).get(sid)) or 0))
+                    out.append("%s[%s%s%s]" % (it.get("name"), "C" if c else "-", "B" if b else "-", "R" if it.get("ref") else ""))
+            print("DIAG sardara %s: %s" % (tag, ", ".join(out)), flush=True)
+        for v in db.execute("SELECT id, data FROM company_versions WHERE company_id=? AND id IN (4, 70)", (cid,)):
+            righe(json.loads(_decomprimi(v["data"])), "copia%d" % v["id"])
+        righe(json.loads(db.execute("SELECT data FROM companies WHERE id=?", (cid,)).fetchone()["data"] or "{}"), "ADESSO")
+        db.close()
+    except Exception as e:
+        print("DIAG sardara errore", e, flush=True)
+
+
+_diag_sardara()
+
 # App di bilancio (Controllo di gestione): pagina /bilancio e API /api/bilancio/... nello stesso servizio
 import bilancio_api
 bilancio_api.registra(app, {
