@@ -2466,8 +2466,7 @@ forgotLink.querySelector('a').onclick = function(ev){ ev.preventDefault(); showF
 box.appendChild(forgotLink);
 var registerLink = document.createElement('div');
 registerLink.style.cssText = 'margin-top:8px;text-align:center;';
-registerLink.innerHTML = '<a href="#" style="font-size:12.5px;color:var(--teal);">Non hai un account? Richiedine uno</a>';
-registerLink.querySelector('a').onclick = function(ev){ ev.preventDefault(); showRegister=true; registerStep='form'; pendingReg={name:'',email:'',phone:'',password:'',acceptedPrivacy:false}; loginError=''; render(); };
+registerLink.innerHTML = '<a href="https://appgestione.it/iscriviti" style="font-size:12.5px;color:var(--teal);">Non hai un account? Richiedine uno</a>';
 box.appendChild(registerLink);
 if(ssoInfo && ssoInfo.enabled && !ssoInfo.user && ssoInfo.loginUrl){
 var grp = document.createElement('div');
@@ -4817,38 +4816,13 @@ planCard.style.cssText = 'background:linear-gradient(135deg, var(--navy), #4a306
 var planHeader = el('div',null,'');
 planHeader.style.cssText = 'display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;';
 var planInfo = el('div',null,'');
-planInfo.appendChild(el('div',null,'<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.75;margin-bottom:4px;">Il tuo piano</div><div style="font-family:var(--font-brand);font-weight:800;font-size:22px;">'+(companyPlan==='pro' ? 'Completo &mdash; 29 &euro;/mese' : 'Gratuito')+'</div>'));
+planInfo.appendChild(el('div',null,'<div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.75;margin-bottom:4px;">Il tuo piano</div><div style="font-family:var(--font-brand);font-weight:800;font-size:22px;">'+(companyPlan==='pro' ? 'Completo' : 'Gratuito')+'</div>'));
 planHeader.appendChild(planInfo);
-var planActionWrap = el('div',null,'');
-if(companyPlan==='pro'){
-var cancelBtn = document.createElement('button');
-cancelBtn.textContent = 'Disdici abbonamento';
-cancelBtn.style.cssText = 'background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.4);padding:10px 18px;border-radius:8px;font-weight:700;cursor:pointer;';
-cancelBtn.onclick = function(){
-showConfirmModal('Disdire l\u2019abbonamento al piano completo? Rester\u00e0 attivo fino alla fine del periodo gi\u00e0 pagato, poi l\u2019account torner\u00e0 automaticamente al piano gratuito. Puoi riattivarlo quando vuoi.', async function(){
-cancelBtn.disabled = true; cancelBtn.textContent = 'Un momento...';
-var r = await apiSend('/api/company/cancel-subscription','POST');
-if(r.ok){ flashStatus('Disdetta registrata: resterai sul piano completo fino a fine periodo'); }
-else { flashStatus((r.data&&r.data.error)||'Errore nella disdetta, riprova'); cancelBtn.disabled=false; cancelBtn.textContent='Disdici abbonamento'; }
-});
-};
-planActionWrap.appendChild(cancelBtn);
-} else {
-var upgradeBtn = document.createElement('button');
-upgradeBtn.textContent = 'Passa al piano completo';
-upgradeBtn.style.cssText = 'background:var(--yellow);color:var(--navy);border:none;padding:10px 18px;border-radius:8px;font-weight:800;cursor:pointer;';
-upgradeBtn.onclick = async function(){
-upgradeBtn.disabled = true; upgradeBtn.textContent = 'Un momento...';
-var r = await apiSend('/api/company/create-checkout-session','POST',{});
-if(r.ok && r.data && r.data.url){ window.location.href = r.data.url; }
-else { flashStatus((r.data&&r.data.error)||'Errore nell\u2019avvio del pagamento, riprova'); upgradeBtn.disabled=false; upgradeBtn.textContent='Passa al piano completo'; }
-};
-planActionWrap.appendChild(upgradeBtn);
-}
+var planActionWrap = el('div',null,'<div style="font-size:13px;opacity:.9;max-width:320px;">Abbonamento gestito da To Smile: per rinnovi o modifiche contatta To Smile.</div>');
 planHeader.appendChild(planActionWrap);
 planCard.appendChild(planHeader);
 if(companyPlan!=='pro'){
-planCard.appendChild(el('div',null,'<div style="margin-top:12px;font-size:13px;opacity:.85;">Sblocca Scostamenti, Previsionale incassi, Listino & margini, Statistiche storiche e la gestione completa del Budget. Disdicibile quando vuoi, senza vincoli.</div>'));
+planCard.appendChild(el('div',null,'<div style="margin-top:12px;font-size:13px;opacity:.85;">Il piano completo sblocca Scostamenti, Previsionale incassi, Listino & margini, Statistiche storiche e la gestione completa del Budget: chiedilo a To Smile.</div>'));
 }
 main.appendChild(planCard);
 var yearCard = el('div','card');

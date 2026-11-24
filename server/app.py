@@ -27,10 +27,6 @@ import html as html_module
 import urllib.parse
 from email.mime.text import MIMEText
 from flask import Flask, request, jsonify, session, g, send_from_directory, redirect
-try:
-    import stripe
-except ImportError:
-    stripe = None
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.environ.get("DATA_DIR", BASE_DIR)
@@ -46,8 +42,6 @@ app.config.update(
     SESSION_REFRESH_EACH_REQUEST=True,
 )
 
-if stripe is not None:
-    stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
 
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -441,59 +435,6 @@ def merge_gated_data(incoming, existing_raw, plan):
 
 
 # ================================================================= ADMIN
-@app.route("/api/admin/status", methods=["GET"])
-def admin_status():
-    db = get_db()
-    row = db.execute("SELECT 1 FROM admin_config WHERE id=1").fetchone()
-    return jsonify({
-        "configured": row is not None,
-        "loggedIn": require_admin()
-    })
-
-
-@app.route("/api/admin/setup", methods=["POST"])
-def admin_setup():
-    db = get_db()
-    row = db.execute("SELECT 1 FROM admin_config WHERE id=1").fetchone()
-    if row is not None:
-        return json_error("La password amministratore e' gia' stata impostata.", 409)
-    body = request.get_json(force=True, silent=True) or {}
-    password = (body.get("password") or "").strip()
-    if len(password) < 6:
-        return json_error("La password deve avere almeno 6 caratteri.")
-    db.execute(
-        "INSERT INTO admin_config (id, password_hash) VALUES (1, ?)",
-        (generate_password_hash(password),)
-    )
-    db.commit()
-    session.clear()
-    session.permanent = True
-    session["role"] = "admin"
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/login", methods=["POST"])
-def admin_login():
-    db = get_db()
-    row = db.execute("SELECT password_hash FROM admin_config WHERE id=1").fetchone()
-    if row is None:
-        return json_error("Nessuna password amministratore configurata. Esegui prima il setup.", 409)
-    body = request.get_json(force=True, silent=True) or {}
-    password = body.get("password") or ""
-    if not check_password_hash(row["password_hash"], password):
-        return json_error("Password errata.", 401)
-    session.clear()
-    session.permanent = True
-    session["role"] = "admin"
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/logout", methods=["POST"])
-def admin_logout():
-    session.clear()
-    return jsonify({"ok": True})
-
-
 @app.route("/api/legal-content", methods=["GET"])
 def get_legal_content():
     db = get_db()
@@ -506,224 +447,6 @@ def get_legal_content():
         "privacyHtml": text_to_safe_html(privacy_text),
         "termsHtml": text_to_safe_html(terms_text)
     })
-
-
-@app.route("/api/admin/legal-content", methods=["GET"])
-def admin_get_legal_content():
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    db = get_db()
-    row = db.execute(
-        "SELECT privacy_policy_text, terms_of_service_text FROM admin_config WHERE id=1"
-    ).fetchone()
-    privacy_text = (row["privacy_policy_text"] if row and row["privacy_policy_text"] else DEFAULT_PRIVACY_TEXT)
-    terms_text = (row["terms_of_service_text"] if row and row["terms_of_service_text"] else DEFAULT_TERMS_TEXT)
-    return jsonify({"privacyText": privacy_text, "termsText": terms_text})
-
-
-@app.route("/api/admin/legal-content", methods=["PUT"])
-def admin_set_legal_content():
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    body = request.get_json(force=True, silent=True) or {}
-    privacy_text = body.get("privacyText")
-    terms_text = body.get("termsText")
-    db = get_db()
-    if privacy_text is not None:
-        db.execute("UPDATE admin_config SET privacy_policy_text=? WHERE id=1", (privacy_text,))
-    if terms_text is not None:
-        db.execute("UPDATE admin_config SET terms_of_service_text=? WHERE id=1", (terms_text,))
-    db.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/companies", methods=["GET"])
-def admin_list_companies():
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    db = get_db()
-    rows = db.execute(
-        "SELECT id, name, email, phone, created_at, suspended, expires_at, plan, approved, "
-        "billing_ragione_sociale, billing_piva, billing_address FROM companies ORDER BY created_at DESC"
-    ).fetchall()
-    return jsonify({"companies": [dict(r) for r in rows]})
-
-
-@app.route("/api/admin/companies", methods=["POST"])
-def admin_create_company():
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    body = request.get_json(force=True, silent=True) or {}
-    name = (body.get("name") or "").strip()
-    password = (body.get("password") or "").strip()
-    email = (body.get("email") or "").strip() or None
-    phone = (body.get("phone") or "").strip() or None
-    if not name:
-        return json_error("Il nome dell'azienda e' obbligatorio.")
-    if len(password) < 4:
-        return json_error("La password deve avere almeno 4 caratteri.")
-    db = get_db()
-    cid = uuid.uuid4().hex[:12]
-    # creata direttamente dal master: gia' approvata, non serve revisione
-    db.execute(
-        "INSERT INTO companies (id, name, email, phone, password_hash, created_at, data, suspended, expires_at, plan, approved) "
-        "VALUES (?,?,?,?,?,?,?,0,NULL,'free',1)",
-        (cid, name, email, phone, generate_password_hash(password), now_iso(), "{}")
-    )
-    db.commit()
-    return jsonify({"id": cid, "name": name})
-
-
-@app.route("/api/admin/companies/<cid>/phone", methods=["PUT"])
-def admin_set_company_phone(cid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    body = request.get_json(force=True, silent=True) or {}
-    phone = (body.get("phone") or "").strip() or None
-    db = get_db()
-    db.execute("UPDATE companies SET phone=? WHERE id=?", (phone, cid))
-    db.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/companies/<cid>/approve", methods=["PUT"])
-def admin_approve_company(cid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    db = get_db()
-    row = db.execute("SELECT name, email FROM companies WHERE id=?", (cid,)).fetchone()
-    if row is None:
-        return json_error("Azienda non trovata.", 404)
-    db.execute("UPDATE companies SET approved=1 WHERE id=?", (cid,))
-    db.commit()
-    if row["email"]:
-        send_email_safe(
-            row["email"],
-            "Il tuo account e' stato attivato",
-            "Ciao,\nil tuo account \"" + row["name"] + "\" e' stato approvato: da ora puoi accedere normalmente."
-        )
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/companies/<cid>", methods=["DELETE"])
-def admin_delete_company(cid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    db = get_db()
-    db.execute("DELETE FROM companies WHERE id=?", (cid,))
-    db.execute("DELETE FROM sso_company_links WHERE company_id=?", (cid,))
-    db.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/companies/<cid>/rename", methods=["PUT"])
-def admin_rename_company(cid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    body = request.get_json(force=True, silent=True) or {}
-    name = (body.get("name") or "").strip()
-    if not name:
-        return json_error("Il nome non puo' essere vuoto.")
-    db = get_db()
-    db.execute("UPDATE companies SET name=? WHERE id=?", (name, cid))
-    db.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/companies/<cid>/password", methods=["PUT"])
-def admin_reset_company_password(cid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    body = request.get_json(force=True, silent=True) or {}
-    password = (body.get("password") or "").strip()
-    if len(password) < 4:
-        return json_error("La password deve avere almeno 4 caratteri.")
-    db = get_db()
-    db.execute("UPDATE companies SET password_hash=? WHERE id=?", (generate_password_hash(password), cid))
-    db.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/companies/<cid>/suspend", methods=["PUT"])
-def admin_suspend_company(cid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    db = get_db()
-    db.execute("UPDATE companies SET suspended=1 WHERE id=?", (cid,))
-    db.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/companies/<cid>/unsuspend", methods=["PUT"])
-def admin_unsuspend_company(cid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    db = get_db()
-    db.execute("UPDATE companies SET suspended=0 WHERE id=?", (cid,))
-    db.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/companies/<cid>/expiry", methods=["PUT"])
-def admin_set_company_expiry(cid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    body = request.get_json(force=True, silent=True) or {}
-    expires_at = body.get("expiresAt") or None  # stringa data "YYYY-MM-DD", o None per togliere la scadenza
-    db = get_db()
-    db.execute("UPDATE companies SET expires_at=? WHERE id=?", (expires_at, cid))
-    db.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/companies/<cid>/plan", methods=["PUT"])
-def admin_set_company_plan(cid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    body = request.get_json(force=True, silent=True) or {}
-    plan = body.get("plan")
-    if plan not in ("free", "pro"):
-        return json_error("Piano non valido: deve essere 'free' o 'pro'.")
-    db = get_db()
-    db.execute("UPDATE companies SET plan=? WHERE id=?", (plan, cid))
-    db.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/companies/<cid>/email", methods=["PUT"])
-def admin_set_company_email(cid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    body = request.get_json(force=True, silent=True) or {}
-    email = (body.get("email") or "").strip() or None
-    if email and "@" not in email:
-        return json_error("Indirizzo email non valido.")
-    db = get_db()
-    db.execute("UPDATE companies SET email=? WHERE id=?", (email, cid))
-    db.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/password-reset-requests", methods=["GET"])
-def admin_list_reset_requests():
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    db = get_db()
-    rows = db.execute(
-        "SELECT id, company_id, company_name, requested_at, resolved FROM password_reset_requests "
-        "WHERE resolved=0 ORDER BY requested_at DESC"
-    ).fetchall()
-    return jsonify({"requests": [dict(r) for r in rows]})
-
-
-@app.route("/api/admin/password-reset-requests/<rid>/resolve", methods=["PUT"])
-def admin_resolve_reset_request(rid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    db = get_db()
-    db.execute("UPDATE password_reset_requests SET resolved=1 WHERE id=?", (rid,))
-    db.commit()
-    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------- storico delle versioni
@@ -757,71 +480,7 @@ def salva_versione(db, company_id, data_text, motivo="", forza=False):
     # Le copie vecchie NON si cancellano più (24/11/2026): servono per ritrovare i dati. Si toglieranno solo con l'OK di Giancarlo.
 
 
-@app.route("/api/admin/companies/<cid>/versions", methods=["GET"])
-def admin_company_versions(cid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    db = get_db()
-    rows = db.execute("SELECT id, saved_at, motivo, length(data) AS dim FROM company_versions WHERE company_id=? ORDER BY id DESC", (cid,)).fetchall()
-    return jsonify({"versions": [dict(r) for r in rows]})
-
-
-@app.route("/api/admin/companies/<cid>/versions/<int:vid>", methods=["GET"])
-def admin_company_version_download(cid, vid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    db = get_db()
-    row = db.execute("SELECT saved_at, data FROM company_versions WHERE id=? AND company_id=?", (vid, cid)).fetchone()
-    if row is None:
-        return json_error("Versione non trovata.", 404)
-    from flask import Response
-    nome = "versione_%s_%s.json" % (cid[:8], row["saved_at"][:16].replace(":", "-"))
-    return Response(_decomprimi(row["data"]), mimetype="application/json",
-                    headers={"Content-Disposition": 'attachment; filename="%s"' % nome})
-
-
-@app.route("/api/admin/companies/<cid>/versions/<int:vid>/restore", methods=["POST"])
-def admin_company_version_restore(cid, vid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    db = get_db()
-    v = db.execute("SELECT saved_at, data FROM company_versions WHERE id=? AND company_id=?", (vid, cid)).fetchone()
-    cur = db.execute("SELECT data FROM companies WHERE id=?", (cid,)).fetchone()
-    if v is None or cur is None:
-        return json_error("Versione non trovata.", 404)
-    testo = _decomprimi(v["data"])
-    json.loads(testo)  # deve essere valido
-    # i dati di adesso restano nello storico: il ripristino si può sempre annullare
-    salva_versione(db, cid, cur["data"], "prima del ripristino", forza=True)
-    db.execute("UPDATE companies SET data=?, rev=rev+1 WHERE id=?", (testo, cid))
-    db.commit()
-    return jsonify({"ok": True})
-
-
 # copia di sicurezza di tutte le aziende in un file (prima di operazioni importanti)
-@app.route("/api/admin/backup-completo", methods=["GET"])
-def admin_full_backup():
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    db = get_db()
-    rows = db.execute("SELECT id, name, data FROM companies ORDER BY name").fetchall()
-    out = {"creato": now_iso(), "aziende": [{"id": r["id"], "nome": r["name"], "data": json.loads(r["data"] or "{}")} for r in rows]}
-    from flask import Response
-    return Response(json.dumps(out), mimetype="application/json",
-                    headers={"Content-Disposition": 'attachment; filename="backup_completo_%s.json"' % now_iso()[:16].replace(":", "-")})
-
-
-@app.route("/api/admin/companies/<cid>/data", methods=["GET"])
-def admin_view_company_data(cid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    db = get_db()
-    row = db.execute("SELECT data FROM companies WHERE id=?", (cid,)).fetchone()
-    if row is None:
-        return json_error("Azienda non trovata.", 404)
-    return jsonify({"data": json.loads(row["data"])})
-
-
 # ================================================================ SUITE (appgestione.it/gestione)
 # Le aziende si gestiscono dal pannello della suite: qui solo le chiamate tra i due servizi,
 # protette dalla chiave condivisa SSO_API_KEY. Nessuna di queste cancella dati.
@@ -1048,46 +707,6 @@ def sso_enter():
     return jsonify({"ok": True, "name": row["name"]})
 
 
-@app.route("/api/admin/sso-users", methods=["GET"])
-def admin_sso_users():
-    """Persone abilitate a Finanza nell'accesso unico, con le aziende assegnate."""
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    if not sso_enabled():
-        return jsonify({"enabled": False, "users": []})
-    code, data = sso_call("/api/sso/users", {"app": "finanza"})
-    if code != 200:
-        return jsonify({"enabled": True, "error": "Accesso unico non raggiungibile, riprova tra poco.", "users": []})
-    users = data.get("users", [])
-    # anche chi ha solo l'App di bilancio: le aziende assegnate qui valgono per entrambe
-    code2, data2 = sso_call("/api/sso/users", {"app": "bilancio"})
-    if code2 == 200:
-        visti = {u["id"] for u in users}
-        users += [u for u in data2.get("users", []) if u["id"] not in visti]
-    links = {}
-    for r in get_db().execute("SELECT sso_user_id, company_id FROM sso_company_links").fetchall():
-        links.setdefault(r["sso_user_id"], []).append(r["company_id"])
-    return jsonify({"enabled": True, "manageUrl": SSO_URL + "/admin", "users": [
-        {"id": u["id"], "name": (u.get("firstName", "") + " " + u.get("lastName", "")).strip(), "email": u.get("email"),
-         "birthDate": u.get("birthDate"), "companies": links.get(u["id"], [])} for u in users]})
-
-
-@app.route("/api/admin/sso-users/<uid>/companies", methods=["PUT"])
-def admin_set_sso_companies(uid):
-    if not require_admin():
-        return json_error("Non autorizzato.", 401)
-    body = request.get_json(force=True, silent=True) or {}
-    ids = [str(x) for x in (body.get("companies") or [])][:200]
-    db = get_db()
-    valid = {r["id"] for r in db.execute("SELECT id FROM companies").fetchall()}
-    db.execute("DELETE FROM sso_company_links WHERE sso_user_id=?", (uid[:64],))
-    for cid in ids:
-        if cid in valid:
-            db.execute("INSERT OR IGNORE INTO sso_company_links (sso_user_id, company_id) VALUES (?,?)", (uid[:64], cid))
-    db.commit()
-    return jsonify({"ok": True, "companies": [c for c in ids if c in valid]})
-
-
 @app.route("/api/company/login", methods=["POST"])
 def company_login():
     body = request.get_json(force=True, silent=True) or {}
@@ -1131,133 +750,6 @@ def company_login():
     return jsonify({"ok": True, "name": row["name"]})
 
 
-@app.route("/api/company/register", methods=["POST"])
-def company_register():
-    body = request.get_json(force=True, silent=True) or {}
-    name = (body.get("name") or "").strip()
-    email = (body.get("email") or "").strip()
-    phone = (body.get("phone") or "").strip()
-    password = (body.get("password") or "").strip()
-    accepted_privacy = bool(body.get("acceptedPrivacy"))
-    if not name:
-        return json_error("Inserisci il nome della tua azienda.")
-    if not email or "@" not in email:
-        return json_error("Inserisci un indirizzo email valido.")
-    if len(password) < 4:
-        return json_error("La password deve avere almeno 4 caratteri.")
-    if not accepted_privacy:
-        return json_error("Devi accettare l'Informativa Privacy e i Termini di Servizio per registrarti.")
-    db = get_db()
-    existing = db.execute("SELECT id FROM companies WHERE name=?", (name,)).fetchone()
-    if existing is not None:
-        return json_error("Esiste gia' un account con questo nome azienda. Scegline un altro o contatta l'assistenza.")
-    cid = uuid.uuid4().hex[:12]
-    db.execute(
-        "INSERT INTO companies (id, name, email, phone, password_hash, created_at, data, suspended, expires_at, plan, approved, privacy_accepted_at) "
-        "VALUES (?,?,?,?,?,?,?,0,NULL,'free',0,?)",
-        (cid, name, email, phone or None, generate_password_hash(password), now_iso(), "{}", now_iso())
-    )
-    db.commit()
-    # riepilogo al cliente, mandato SOLO ora: e' l'unico momento in cui il
-    # server vede la password in chiaro, prima di cifrarla per sempre
-    send_email_safe(
-        email,
-        "Richiesta ricevuta - " + name,
-        "Ciao,\nabbiamo ricevuto la tua richiesta di accesso. Ecco il riepilogo dei dati che hai inserito:\n\n"
-        "Nome azienda: " + name + "\n"
-        "Email: " + email + "\n"
-        + ("Telefono: " + phone + "\n" if phone else "")
-        + "Password scelta: " + password + "\n\n"
-        "Conservali in un posto sicuro: sono le credenziali che userai per accedere.\n"
-        "La richiesta e' ora in attesa di approvazione: riceverai un'altra email quando l'account sara' attivo."
-    )
-    send_email_safe(
-        get_admin_notify_email(),
-        "Nuova richiesta di accesso: " + name,
-        "L'azienda \"" + name + "\" (" + email + (", tel. " + phone if phone else "") + ") ha richiesto un account.\n"
-        "Vai sul pannello master per approvarla, prima che possa accedere."
-    )
-    return jsonify({"ok": True, "id": cid})
-
-
-@app.route("/api/company/create-checkout-session", methods=["POST"])
-def create_checkout_session():
-    body = request.get_json(force=True, silent=True) or {}
-    # se il richiedente e' gia' loggato, usiamo SEMPRE la sua identita' di
-    # sessione (mai fidarsi di un companyId scelto dal client mentre e'
-    # loggato); il companyId nel corpo resta necessario solo nel flusso di
-    # registrazione, quando non esiste ancora una sessione valida.
-    if session.get("role") == "company" and session.get("company_id"):
-        company_id = session["company_id"]
-    else:
-        company_id = (body.get("companyId") or "").strip()
-    if not company_id:
-        return json_error("Richiesta non valida.")
-    if stripe is None or not os.environ.get("STRIPE_SECRET_KEY") or not os.environ.get("STRIPE_PRICE_ID"):
-        return json_error("I pagamenti non sono ancora configurati sul server. Contatta l'amministratore.", 500)
-    db = get_db()
-    row = db.execute("SELECT id, name, email FROM companies WHERE id=?", (company_id,)).fetchone()
-    if row is None:
-        return json_error("Azienda non trovata.", 404)
-    try:
-        checkout_session = stripe.checkout.Session.create(
-            mode="subscription",
-            line_items=[{"price": os.environ.get("STRIPE_PRICE_ID"), "quantity": 1}],
-            customer_email=row["email"] or None,
-            client_reference_id=row["id"],
-            subscription_data={"metadata": {"company_id": row["id"]}},
-            metadata={"company_id": row["id"]},
-            billing_address_collection="required",
-            tax_id_collection={"enabled": True},
-            custom_fields=[{
-                "key": "ragione_sociale",
-                "label": {"type": "custom", "custom": "Ragione sociale (per la fattura)"},
-                "type": "text",
-                "optional": False
-            }],
-            success_url=request.host_url.rstrip("/") + "/?checkout=success",
-            cancel_url=request.host_url.rstrip("/") + "/?checkout=cancel",
-        )
-        return jsonify({"url": checkout_session.url})
-    except Exception as e:
-        app.logger.error("Errore nella creazione della sessione Stripe: %s", e)
-        return json_error("Errore nell'avvio del pagamento. Riprova tra poco.", 500)
-
-
-@app.route("/api/company/cancel-subscription", methods=["POST"])
-def cancel_subscription():
-    if not require_company():
-        return json_error("Non autorizzato.", 401)
-    ok, err = check_company_access()
-    if not ok:
-        return err
-    if stripe is None or not os.environ.get("STRIPE_SECRET_KEY"):
-        return json_error("I pagamenti non sono ancora configurati sul server. Contatta l'amministratore.", 500)
-    db = get_db()
-    row = db.execute(
-        "SELECT stripe_subscription_id, name, email FROM companies WHERE id=?",
-        (session["company_id"],)
-    ).fetchone()
-    if row is None:
-        return json_error("Azienda non trovata.", 404)
-    if not row["stripe_subscription_id"]:
-        return json_error("Non risulta un abbonamento attivo da disdire.", 400)
-    try:
-        stripe.Subscription.modify(row["stripe_subscription_id"], cancel_at_period_end=True)
-    except Exception as e:
-        app.logger.error("Errore nella disdetta della sottoscrizione Stripe: %s", e)
-        return json_error("Errore nella disdetta. Riprova tra poco o contatta l'assistenza.", 500)
-    if row["email"]:
-        send_email_safe(
-            row["email"],
-            "Disdetta abbonamento confermata",
-            "Ciao,\nabbiamo ricevuto la tua richiesta di disdetta per \"" + row["name"] + "\". "
-            "Il piano completo restera' attivo fino alla fine del periodo gia' pagato, poi l'account "
-            "tornera' automaticamente al piano gratuito. Puoi riattivarlo quando vuoi."
-        )
-    return jsonify({"ok": True})
-
-
 @app.route("/api/company/support-request", methods=["POST"])
 def support_request():
     if not require_company():
@@ -1291,85 +783,6 @@ def support_request():
     if not sent:
         return json_error("Impossibile inviare la richiesta al momento. Riprova tra poco o contatta direttamente l'assistenza.", 500)
     return jsonify({"ok": True})
-
-
-@app.route("/api/stripe/webhook", methods=["POST"])
-def stripe_webhook():
-    if stripe is None:
-        return json_error("Stripe non disponibile.", 500)
-    payload = request.get_data()
-    sig_header = request.headers.get("Stripe-Signature", "")
-    webhook_secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-    try:
-        event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
-    except Exception as e:
-        app.logger.warning("Webhook Stripe non valido: %s", e)
-        return json_error("Webhook non valido.", 400)
-
-    etype = event.get("type")
-    obj = event.get("data", {}).get("object", {})
-    db = get_db()
-
-    if etype == "checkout.session.completed":
-        company_id = obj.get("client_reference_id") or (obj.get("metadata") or {}).get("company_id")
-        customer_id = obj.get("customer")
-        subscription_id = obj.get("subscription")
-        customer_details = obj.get("customer_details") or {}
-        addr = customer_details.get("address") or {}
-        address_parts = [addr.get("line1"), addr.get("line2"), addr.get("postal_code"),
-                          addr.get("city"), addr.get("state"), addr.get("country")]
-        billing_address = ", ".join([p for p in address_parts if p]) or None
-        tax_ids = customer_details.get("tax_ids") or []
-        billing_piva = tax_ids[0].get("value") if tax_ids else None
-        ragione_sociale = None
-        for field in (obj.get("custom_fields") or []):
-            if field.get("key") == "ragione_sociale":
-                ragione_sociale = (field.get("text") or {}).get("value")
-        if company_id:
-            row = db.execute("SELECT name, email FROM companies WHERE id=?", (company_id,)).fetchone()
-            db.execute(
-                "UPDATE companies SET plan='pro', approved=1, suspended=0, expires_at=NULL, "
-                "stripe_customer_id=?, stripe_subscription_id=?, "
-                "billing_ragione_sociale=?, billing_piva=?, billing_address=? WHERE id=?",
-                (customer_id, subscription_id, ragione_sociale, billing_piva, billing_address, company_id)
-            )
-            db.commit()
-            if row and row["email"]:
-                send_email_safe(
-                    row["email"],
-                    "Abbonamento attivato",
-                    "Ciao,\nil pagamento e' andato a buon fine: il tuo account \"" + row["name"] + "\" "
-                    "e' ora attivo con il piano completo (29 EUR/mese, disdicibile quando vuoi). "
-                    "Puoi accedere da subito."
-                )
-            send_email_safe(
-                get_admin_notify_email(),
-                "Nuovo abbonamento pagante",
-                "L'azienda \"" + (row["name"] if row else company_id) + "\" ha completato il pagamento "
-                "ed e' stata attivata automaticamente sul piano Pro.\n\n"
-                "Dati di fatturazione forniti dal cliente:\n"
-                "Ragione sociale: " + (ragione_sociale or "non indicata") + "\n"
-                "Partita IVA: " + (billing_piva or "non indicata") + "\n"
-                "Indirizzo: " + (billing_address or "non indicato")
-            )
-
-    elif etype == "customer.subscription.deleted":
-        subscription_id = obj.get("id")
-        row = db.execute(
-            "SELECT id, name, email FROM companies WHERE stripe_subscription_id=?", (subscription_id,)
-        ).fetchone()
-        if row:
-            db.execute("UPDATE companies SET plan='free' WHERE id=?", (row["id"],))
-            db.commit()
-            if row["email"]:
-                send_email_safe(
-                    row["email"],
-                    "Abbonamento terminato",
-                    "Ciao,\nil tuo abbonamento al piano completo per \"" + row["name"] + "\" e' terminato. "
-                    "Il tuo account resta attivo con il piano gratuito. Puoi riattivare l'abbonamento quando vuoi."
-                )
-
-    return jsonify({"received": True})
 
 
 @app.route("/api/company/logout", methods=["POST"])
@@ -1566,7 +979,8 @@ def legacy_finanziario():
 
 @app.route("/admin", methods=["GET"])
 def serve_admin():
-    return send_from_directory(STATIC_DIR, "admin.html")
+    # il vecchio pannello non c'e' piu': le aziende si gestiscono da appgestione.it/gestione
+    return redirect(SSO_URL + "/gestione")
 
 
 # ---------------------------------------------------------------- altre app sullo stesso dominio
