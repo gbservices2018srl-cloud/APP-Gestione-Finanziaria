@@ -731,11 +731,6 @@ var loginError = '';
 var ssoInfo = null, ssoMode = false, ssoHome = '';
 function ssoEsc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 var showForgotPassword = false;
-var showRegister = false;
-var registerSent = false;
-var registerStep = 'form';
-var pendingReg = {name:'', email:'', phone:'', password:'', acceptedPrivacy:false};
-var checkoutResult = null;
 var legalPageView = null;
 var legalPageReturnTo = null;
 var resetToken = null;
@@ -2005,10 +2000,6 @@ if(resetToken){
 renderResetPasswordScreen(main);
 return;
 }
-if(checkoutResult && !isLoggedIn){
-renderCheckoutResultScreen(main);
-return;
-}
 if(legalPageView){
 renderLegalPage(main);
 return;
@@ -2102,26 +2093,6 @@ reader.onerror = function(){ callback(null); };
 reader.readAsDataURL(file);
 }
 var RENDERERS = {};
-function renderCheckoutResultScreen(main){
-var wrap = el('div','auth-wrap');
-var box = el('div','auth-box');
-if(checkoutResult==='success'){
-box.appendChild(el('h1','pagetitle','Pagamento ricevuto'));
-box.appendChild(el('p','pagesub','Stiamo attivando il tuo account: richiede di solito pochi secondi. Prova ad accedere; se dice ancora "in attesa", aspetta un momento e riprova.'));
-} else {
-box.appendChild(el('h1','pagetitle','Pagamento annullato'));
-box.appendChild(el('p','pagesub','Nessun addebito effettuato. Puoi riprovare quando vuoi dalla schermata di accesso.'));
-}
-var goLoginBtn2 = el('button','btn','Vai all\u2019accesso');
-goLoginBtn2.onclick = function(){
-checkoutResult = null;
-try{ window.history.replaceState({}, '', window.location.pathname); }catch(e){}
-render();
-};
-box.appendChild(goLoginBtn2);
-wrap.appendChild(box);
-main.appendChild(wrap);
-}
 
 /* ============================================================
    ATTENZIONE: questo e' un TESTO DI BOZZA, pensato come punto di
@@ -2211,7 +2182,6 @@ var backBtn = el('button','btn secondary','&larr; Indietro');
 backBtn.style.marginTop = '18px';
 backBtn.onclick = function(){
 legalPageView = null;
-if(legalPageReturnTo==='register'){ showRegister = true; }
 legalPageReturnTo = null;
 render();
 };
@@ -2261,119 +2231,7 @@ wrap.appendChild(box);
 main.appendChild(wrap);
 }
 
-function renderRegisterScreen(main){
-var wrap = el('div','auth-wrap');
-var box = el('div','auth-box');
-if(registerSent){
-box.appendChild(el('h1','pagetitle','Richiedi un account'));
-box.appendChild(el('p','pagesub','Richiesta inviata! Riceverai una email quando l\u2019account sar\u00e0 attivato.'));
-var backBtn2 = el('button','btn secondary','Torna all\u2019accesso');
-backBtn2.onclick = function(){ showRegister=false; registerSent=false; registerStep='form'; loginError=''; render(); };
-box.appendChild(backBtn2);
-wrap.appendChild(box); main.appendChild(wrap);
-return;
-}
-if(registerStep==='planChoice'){
-box.appendChild(el('h1','pagetitle','Scegli il piano'));
-box.appendChild(el('p','pagesub','Puoi cambiare idea in qualsiasi momento contattandoci.'));
-if(loginError){ box.appendChild(el('div','notebox', loginError)); }
-var freeBox = el('div','card');
-freeBox.appendChild(el('h2',null,'Gratuito'));
-freeBox.appendChild(el('p',null,'Riepilogo, Consuntivo mensile e Conto economico. Le altre funzioni restano visibili ma bloccate.'));
-var freeBtn = el('button','btn secondary','Scegli Gratuito');
-freeBtn.onclick = async function(){
-loginError='';
-freeBtn.disabled = true; freeBtn.textContent='Un momento...';
-var r = await apiSend('/api/company/register','POST',{name:pendingReg.name, email:pendingReg.email, phone:pendingReg.phone, password:pendingReg.password, acceptedPrivacy:pendingReg.acceptedPrivacy});
-if(r.ok){ registerSent = true; render(); }
-else { loginError = (r.data&&r.data.error)||'Errore, riprova.'; registerStep='form'; render(); }
-};
-freeBox.appendChild(freeBtn);
-box.appendChild(freeBox);
-var paidBox = el('div','card');
-paidBox.appendChild(el('h2',null,'Completo \u2014 29 &euro;/mese'));
-paidBox.appendChild(el('p',null,'Tutte le funzioni sbloccate. Disdicibile quando vuoi, senza vincoli.'));
-var paidBtn = el('button','btn','Scegli il piano completo');
-paidBtn.onclick = async function(){
-loginError='';
-paidBtn.disabled = true; paidBtn.textContent='Un momento...';
-var r = await apiSend('/api/company/register','POST',{name:pendingReg.name, email:pendingReg.email, phone:pendingReg.phone, password:pendingReg.password, acceptedPrivacy:pendingReg.acceptedPrivacy});
-if(!r.ok){ loginError = (r.data&&r.data.error)||'Errore, riprova.'; registerStep='form'; render(); return; }
-var r2 = await apiSend('/api/company/create-checkout-session','POST',{companyId:r.data.id});
-if(r2.ok && r2.data && r2.data.url){ window.location.href = r2.data.url; }
-else { loginError = (r2.data&&r2.data.error)||'Errore nell\u2019avvio del pagamento.'; paidBtn.disabled=false; paidBtn.textContent='Scegli il piano completo'; render(); }
-};
-paidBox.appendChild(paidBtn);
-box.appendChild(paidBox);
-var backBtn3 = el('button','btn secondary','Indietro');
-backBtn3.onclick = function(){ registerStep='form'; loginError=''; render(); };
-box.appendChild(backBtn3);
-wrap.appendChild(box); main.appendChild(wrap);
-return;
-}
-box.appendChild(el('h1','pagetitle','Richiedi un account'));
-box.appendChild(el('p','pagesub','Compila i dati della tua azienda: al passo successivo scegli il piano.'));
-var rNameRow = el('div','input-row');
-rNameRow.appendChild(el('label',null,'Nome azienda'));
-var rNameInp = document.createElement('input'); rNameInp.type='text'; rNameInp.style.width='220px'; rNameInp.value = pendingReg.name;
-rNameRow.appendChild(rNameInp);
-box.appendChild(rNameRow);
-var rEmailRow = el('div','input-row');
-rEmailRow.appendChild(el('label',null,'Email'));
-var rEmailInp = document.createElement('input'); rEmailInp.type='email'; rEmailInp.style.width='220px'; rEmailInp.value = pendingReg.email;
-rEmailRow.appendChild(rEmailInp);
-box.appendChild(rEmailRow);
-var rPhoneRow = el('div','input-row');
-rPhoneRow.appendChild(el('label',null,'Telefono (facoltativo)'));
-var rPhoneInp = document.createElement('input'); rPhoneInp.type='tel'; rPhoneInp.style.width='220px'; rPhoneInp.value = pendingReg.phone;
-rPhoneRow.appendChild(rPhoneInp);
-box.appendChild(rPhoneRow);
-var rPwRow = el('div','input-row');
-rPwRow.appendChild(el('label',null,'Password'));
-var rPwInp = document.createElement('input'); rPwInp.type='password'; rPwInp.style.width='220px';
-rPwRow.appendChild(rPwInp);
-box.appendChild(rPwRow);
-var consentRow = document.createElement('div');
-consentRow.style.cssText = 'display:flex;align-items:flex-start;gap:8px;margin:14px 0;font-size:12.5px;';
-var consentCb = document.createElement('input'); consentCb.type='checkbox'; consentCb.id='privacyConsentCb'; consentCb.checked = !!pendingReg.acceptedPrivacy;
-consentCb.style.marginTop = '3px';
-var consentLabel = document.createElement('label');
-consentLabel.setAttribute('for','privacyConsentCb');
-consentLabel.innerHTML = 'Ho letto e accetto l\u2019<a href="#" id="privacyLinkA">Informativa Privacy</a> e i <a href="#" id="termsLinkA">Termini di Servizio</a>.';
-consentRow.appendChild(consentCb);
-consentRow.appendChild(consentLabel);
-box.appendChild(consentRow);
-if(loginError){ box.appendChild(el('div','notebox', loginError)); }
-var registerBtn = el('button','btn','Avanti');
-registerBtn.onclick = function(){
-loginError='';
-if(!rNameInp.value.trim()){ loginError='Inserisci il nome della tua azienda.'; render(); return; }
-if(!rEmailInp.value.trim() || rEmailInp.value.indexOf('@')===-1){ loginError='Inserisci un\u2019email valida.'; render(); return; }
-if(rPwInp.value.length<4){ loginError='La password deve avere almeno 4 caratteri.'; render(); return; }
-if(!consentCb.checked){ loginError='Devi accettare l\u2019Informativa Privacy e i Termini di Servizio per procedere.'; render(); return; }
-pendingReg = {name:rNameInp.value.trim(), email:rEmailInp.value.trim(), phone:rPhoneInp.value.trim(), password:rPwInp.value, acceptedPrivacy:true};
-registerStep = 'planChoice';
-render();
-};
-box.appendChild(registerBtn);
-var backBtn = el('button','btn secondary','Torna all\u2019accesso');
-backBtn.style.marginLeft='10px';
-backBtn.onclick = function(){ showRegister=false; loginError=''; render(); };
-box.appendChild(backBtn);
-wrap.appendChild(box);
-main.appendChild(wrap);
-var privacyLinkEl = document.getElementById('privacyLinkA');
-if(privacyLinkEl) privacyLinkEl.onclick = function(ev){ ev.preventDefault();
-pendingReg = {name:rNameInp.value.trim(), email:rEmailInp.value.trim(), phone:rPhoneInp.value.trim(), password:rPwInp.value, acceptedPrivacy:consentCb.checked};
-legalPageView='privacy'; legalPageReturnTo='register'; legalContentCache=null; showRegister=false; render(); };
-var termsLinkEl = document.getElementById('termsLinkA');
-if(termsLinkEl) termsLinkEl.onclick = function(ev){ ev.preventDefault();
-pendingReg = {name:rNameInp.value.trim(), email:rEmailInp.value.trim(), phone:rPhoneInp.value.trim(), password:rPwInp.value, acceptedPrivacy:consentCb.checked};
-legalPageView='terms'; legalPageReturnTo='register'; legalContentCache=null; showRegister=false; render(); };
-}
-
 function renderLoginScreen(main){
-if(showRegister){ renderRegisterScreen(main); return; }
 var wrap = el('div','auth-wrap');
 var box = el('div','auth-box');
 if(showForgotPassword){
@@ -4995,7 +4853,6 @@ if(sidebarTermsLinkEl) sidebarTermsLinkEl.addEventListener('click', function(ev)
 try{
 var urlParams = new URLSearchParams(window.location.search);
 if(urlParams.get('reset')) resetToken = urlParams.get('reset');
-if(urlParams.get('checkout')) checkoutResult = urlParams.get('checkout');
 }catch(e){}
 startInactivityWatcher();
 bootApp();

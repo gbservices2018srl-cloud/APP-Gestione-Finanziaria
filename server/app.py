@@ -205,10 +205,6 @@ def now_iso():
 
 
 # ---------------------------------------------------------------- helpers
-def require_admin():
-    return session.get("role") == "admin"
-
-
 def require_company():
     if not (session.get("role") == "company" and session.get("company_id")):
         return False
