@@ -242,9 +242,45 @@ def registra(app, data_dir, db_path):
         parte = request.args.get("parte", "dati")
         if not _autorizzato(slug):
             return jsonify({"error": "Non autorizzato"}), 401
-        if parte not in ("dati", "finanza", "nuovalab", "ticket", "file") or (parte != "dati" and slug != "tosmile"):
+        if parte not in ("dati", "finanza", "nuovalab", "ticket", "file", "tutto") or (parte != "dati" and slug != "tosmile"):
             return jsonify({"error": "Parte non valida"}), 400
         d = cartella(slug)
+        if parte == "tutto":  # l'intera app in un solo file: To Smile, ogni cliente, Gestione finanziaria, Nuovalab, Ticket e tutti i file allegati
+            def gen_tutto():
+                class Uscita:
+                    def __init__(self):
+                        self.parti = []
+                    def write(self, b):
+                        self.parti.append(bytes(b))
+                        return len(b)
+                    def flush(self):
+                        pass
+                u = Uscita()
+                with tarfile.open(fileobj=u, mode="w|") as tar:
+                    for cl in sorted(os.listdir(base)):
+                        cd = os.path.join(base, cl)
+                        if not os.path.isdir(cd):
+                            continue
+                        for pref in ("dati", "finanza", "nuovalab", "ticket"):
+                            ff = sorted(x for x in os.listdir(cd) if x.startswith(pref + "-") and not x.endswith(".part"))
+                            if ff:
+                                tar.add(os.path.join(cd, ff[-1]), arcname=cl + "/" + ff[-1])
+                                while u.parti:
+                                    yield u.parti.pop(0)
+                        for nome in ("file-nuovalab", "file-ticket"):
+                            radice = os.path.join(cd, nome)
+                            if not os.path.isdir(radice):
+                                continue
+                            for cart, _, files in os.walk(radice):
+                                for f in files:
+                                    pth = os.path.join(cart, f)
+                                    tar.add(pth, arcname=cl + "/" + os.path.relpath(pth, cd))
+                                    while u.parti:
+                                        yield u.parti.pop(0)
+                while u.parti:
+                    yield u.parti.pop(0)
+            giorno = datetime.datetime.now(ROMA).strftime("%Y-%m-%d")
+            return Response(gen_tutto(), mimetype="application/x-tar", headers={"Content-Disposition": f'attachment; filename="backup-completo-appgestione-{giorno}.tar"', "Cache-Control": "no-store"})
         if parte == "file":  # tutti i file allegati, impacchettati al momento
             def gen():
                 class Uscita:
