@@ -2095,6 +2095,30 @@ def _diag_copie():
                 stati(json.loads(_decomprimi(vers[k]["data"])), "copia%d" % k)
             ora = json.loads(cur["data"] or "{}")
             stati(ora, "ADESSO")
+            # dove compaiono le persone indicate da Giancarlo (solo posizione e sì/no, nessun importo)
+            def cerca(d, tag):
+                sites = {x.get("id"): x.get("name") for x in d.get("sites") or []}
+                cats = {c.get("id"): c.get("name") for c in (d.get("fixedCats") or []) + (d.get("varCats") or [])}
+                cf = (d.get("consuntivo") or {}).get("fixed") or {}
+                trovati = []
+                for it in d.get("fixedItems") or []:
+                    n = (it.get("name") or "").lower()
+                    for chi in ("olla", "atzeni", "largiu"):
+                        if chi in n:
+                            nz = any(float(x or 0) for v in (cf.get(it.get("id")) or {}).values() for x in (v or []))
+                            trovati.append("%s:fissi/%s/%s ref=%s cons=%s" % (chi, cats.get(it.get("catId")), sites.get(it.get("siteId"), "generale"), bool(it.get("ref")), nz))
+                for cid_, per in ((d.get("consuntivo") or {}).get("varCat") or {}).items():
+                    for sid, e in (per or {}).items():
+                        for sp in (e or {}).get("suppliers") or [] if isinstance(e, dict) else []:
+                            n = (sp.get("name") or "").lower()
+                            for chi in ("olla", "atzeni", "largiu"):
+                                if chi in n:
+                                    trovati.append("%s:variabili/%s/%s cons=%s" % (chi, cats.get(cid_), sites.get(sid), any(float(x or 0) for x in sp.get("values") or [])))
+                print("DIAG %s persone: %s" % (tag, " | ".join(trovati) or "nessuna"), flush=True)
+            tutte = {v["id"]: v for v in db.execute("SELECT id, data FROM company_versions WHERE company_id=? AND id IN (4, 33, 43, 57, 61, 70, 71)", (cid,))}
+            for k in sorted(tutte):
+                cerca(json.loads(_decomprimi(tutte[k]["data"])), "copia%d" % k)
+            cerca(ora, "ADESSO")
             if 70 in vers:
                 v70 = json.loads(_decomprimi(vers[70]["data"]))
                 ids_ora = {x.get("id") for x in ora.get("fixedItems") or []}
