@@ -556,7 +556,9 @@ def suite_aggiorna_azienda(cid):
     if body.get("approva"):
         db.execute("UPDATE companies SET approved=1 WHERE id=?", (cid,))
     if body.get("nuova_password"):
-        pw = secrets.token_urlsafe(9)
+        pw = str(body.get("password") or "").strip() or secrets.token_urlsafe(9)
+        if len(pw) < 6:
+            return json_error("La password deve avere almeno 6 caratteri.")
         db.execute("UPDATE companies SET password_hash=? WHERE id=?", (generate_password_hash(pw), cid))
         db.execute("UPDATE password_reset_requests SET resolved=1 WHERE company_id=?", (cid,))
         out["password"] = pw
