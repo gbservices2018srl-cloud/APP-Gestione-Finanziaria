@@ -2022,6 +2022,10 @@ _trasloco_import()
 
 init_db()
 
+# Backup unico della suite: copia notturna di tutte le app (To Smile e clienti) su questo disco
+import backup as _backup  # noqa: E402
+_backup.registra(app, DATA_DIR, DB_PATH)
+
 
 
 # Pulizia approvata da Giancarlo il 24/11/2026 («rimetti tutto a posto»), una volta sola:
