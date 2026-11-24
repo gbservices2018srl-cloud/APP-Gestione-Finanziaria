@@ -1731,7 +1731,9 @@ def _cons_var_mese(d, cat, sid, m):
 # nome (anche messo a mano) viene collegato invece di essere duplicato.
 _TITOLI = {"dr", "dott", "dottor", "dottore", "dottssa", "dottoressa", "doc", "prof", "sig", "sigra"}
 def _parole_nome(n):
-    t = re.sub(r"[^a-zà-ü' ]", " ", str(n or "").lower().replace(".", ""))
+    # «MURTAS SILVIA (RAP)» = «Silvia Murtas»: il ruolo tra parentesi non conta
+    t = re.sub(r"\([^)]*\)", " ", str(n or "").lower())
+    t = re.sub(r"[^a-zà-ü' ]", " ", t.replace(".", ""))
     return frozenset(w for w in t.split() if w and w not in _TITOLI)
 def _stesso_nome(a, b):
     pa, pb = _parole_nome(a), _parole_nome(b)
@@ -2020,6 +2022,88 @@ _trasloco_import()
 init_db()
 
 
+
+# Pulizia approvata da Giancarlo il 24/11/2026 («rimetti tutto a posto»), una volta sola:
+# toglie SOLO le righe doppie create dall'allineamento persone del 23/11 (non c'erano nella copia 61, hanno il collegamento
+# alla persona e sono a zero ovunque: budget, bozza, consuntivo) quando nella stessa sede c'è già la riga vecchia della
+# stessa persona; il collegamento passa alla riga vecchia, che tiene nome e importi. Le persone davvero nuove restano.
+# Prima salva una copia («prima della pulizia dei doppioni»), che resta per tornare indietro.
+def _pulizia_doppioni_20261124():
+    try:
+        db = sqlite3.connect(DB_PATH); db.row_factory = sqlite3.Row
+        db.execute("CREATE TABLE IF NOT EXISTS operazioni_fatte (chiave TEXT PRIMARY KEY, il TEXT)")
+        if db.execute("SELECT 1 FROM operazioni_fatte WHERE chiave='pulizia-doppioni-20261124'").fetchone():
+            db.close(); return
+        full = db.execute("SELECT id FROM companies WHERE id LIKE 'cd1ac58f%'").fetchone()
+        base = full and db.execute("SELECT data FROM company_versions WHERE company_id=? AND id=61 AND motivo LIKE 'prima delle persone%'", (full["id"],)).fetchone()
+        if not full or not base:
+            print("Pulizia doppioni: copia 61 non trovata, non faccio nulla", flush=True); db.close(); return
+        cid = full["id"]
+        row = db.execute("SELECT data, rev FROM companies WHERE id=?", (cid,)).fetchone()
+        d = json.loads(row["data"] or "{}")
+        if d.get("_editingArchivedYear") not in (None, "") or d.get("_editingNextYearBudget"):
+            print("Pulizia doppioni: anno archiviato o bozza aperta, rimando", flush=True); db.close(); return
+        prima = json.loads(_decomprimi(base["data"]))
+        ids_prima = {x.get("id") for x in prima.get("fixedItems") or []}
+        sup_prima = {x.get("id") for x in prima.get("supplierMaster") or []}
+        sites = {x.get("id"): x.get("name") for x in d.get("sites") or []}
+        bgs = [bg for bg in (d.get("budget"), d.get("nextYearBudget"), d.get("_budgetLiveBackup")) if isinstance(bg, dict)]
+        cons = d.setdefault("consuntivo", {})
+        def zero_fisso(iid):
+            for bg in bgs:
+                if any(float(v or 0) for v in ((bg.get("fixed") or {}).get(iid) or {}).values()): return False
+            return not any(float(x or 0) for v in ((cons.get("fixed") or {}).get(iid) or {}).values() for x in (v or []))
+        tolte, collegate, restano = [], 0, []
+        items = d.get("fixedItems") or []
+        nuove = [x for x in items if x.get("id") not in ids_prima and x.get("ref")]
+        via = set()
+        for n in nuove:
+            vecchie = [x for x in items if x.get("id") in ids_prima and x.get("catId") == n.get("catId") and x.get("siteId") == n.get("siteId")
+                       and not x.get("ref") and _stesso_nome(x.get("name"), n.get("name"))]
+            if len(vecchie) == 1 and zero_fisso(n.get("id")):
+                vecchie[0]["ref"] = n["ref"]; collegate += 1; via.add(n["id"])
+                tolte.append("%s: %s (resta %s)" % (sites.get(n.get("siteId"), "?"), n.get("name"), vecchie[0].get("name")))
+            else:
+                restano.append("%s: %s" % (sites.get(n.get("siteId"), "?"), n.get("name")))
+        if via:
+            d["fixedItems"] = [x for x in items if x.get("id") not in via]
+            for bg in bgs:
+                for iid in via: (bg.get("fixed") or {}).pop(iid, None)
+            for iid in via: (cons.get("fixed") or {}).pop(iid, None)
+        # medici (Costi per dottori): stessa regola
+        M = d.get("supplierMaster") or []
+        vc = cons.get("varCat") or {}
+        def zero_sup(m):
+            if any(float(x or 0) for p in (m.get("parked") or {}).values() for x in ((p or {}).get("values") or [])): return False
+            for e in (vc.get(m.get("catId")) or {}).values():
+                for sp in (e or {}).get("suppliers") or [] if isinstance(e, dict) else []:
+                    if sp.get("id") == m.get("id") and any(float(x or 0) for x in sp.get("values") or []): return False
+            return True
+        via_m = set()
+        for m in [x for x in M if x.get("id") not in sup_prima and x.get("ref")]:
+            vecchi = [x for x in M if x.get("id") in sup_prima and x.get("catId") == m.get("catId") and not x.get("ref") and _stesso_nome(x.get("name"), m.get("name"))]
+            if len(vecchi) == 1 and zero_sup(m):
+                vecchi[0]["ref"] = m["ref"]; via_m.add(m["id"]); collegate += 1
+                tolte.append("medici: %s (resta %s)" % (m.get("name"), vecchi[0].get("name")))
+            else:
+                restano.append("medici: %s" % m.get("name"))
+        if via_m:
+            d["supplierMaster"] = [x for x in M if x.get("id") not in via_m]
+            for per in vc.values():
+                for e in (per or {}).values():
+                    if isinstance(e, dict) and e.get("suppliers"):
+                        e["suppliers"] = [sp for sp in e["suppliers"] if sp.get("id") not in via_m]
+        if tolte:
+            salva_versione(db, cid, row["data"], "prima della pulizia dei doppioni", forza=True)
+            db.execute("UPDATE companies SET data=?, rev=? WHERE id=?", (json.dumps(d), (row["rev"] or 0) + 1, cid))
+        db.execute("INSERT INTO operazioni_fatte (chiave, il) VALUES ('pulizia-doppioni-20261124', ?)", (now_iso(),))
+        db.commit(); db.close()
+        print("Pulizia doppioni: tolte %d righe doppie vuote (collegate alla riga vecchia). TOLTE: %s || RESTANO (persone nuove o non sicure): %s" % (len(tolte), " ; ".join(tolte), " ; ".join(restano)), flush=True)
+    except Exception as e:
+        print("Pulizia doppioni: errore, non fatto nulla:", e, flush=True)
+
+
+_pulizia_doppioni_20261124()
 
 # App di bilancio (Controllo di gestione): pagina /bilancio e API /api/bilancio/... nello stesso servizio
 import bilancio_api
