@@ -2262,6 +2262,55 @@ def _diag_elmas_e_nomi():
 
 _diag_elmas_e_nomi()
 
+
+# Confronto cella per cella (sola lettura): importi che c'erano in una copia e oggi mancano o sono diversi. Nel log solo sezione, sede e conteggi.
+def _diag_celle():
+    try:
+        db = sqlite3.connect(DB_PATH); db.row_factory = sqlite3.Row
+        full = db.execute("SELECT id FROM companies WHERE id LIKE 'cd1ac58f%'").fetchone()
+        if not full: return
+        cid = full["id"]
+        def celle(d):
+            sites = {x.get("id"): x.get("name") for x in d.get("sites") or []}
+            out = {}
+            def num(path, v):
+                try: f = float(v or 0)
+                except Exception: return
+                out[path] = f
+            def giu(o, path):
+                if isinstance(o, dict):
+                    for k, v in o.items(): giu(v, path + (k,))
+                elif isinstance(o, list):
+                    if o and all(isinstance(x, (int, float)) or x is None for x in o):
+                        for i, x in enumerate(o): num(path + (i,), x)
+                    else:
+                        for x in o:
+                            if isinstance(x, dict) and "id" in x and "values" in x:
+                                for i, v in enumerate(x.get("values") or []): num(path + ("sup", x["id"], i), v)
+                elif isinstance(o, (int, float)) and not isinstance(o, bool):
+                    num(path, o)
+            for k in ("budget", "consuntivo", "nextYearBudget"):
+                giu(d.get(k) or {}, (k,))
+            return out, sites
+        def confronta(a, b, tag):
+            ca, sa = celle(a); cb, _ = celle(b)
+            persi = {}
+            for k, v in ca.items():
+                if abs(v) > 0.004 and abs(cb.get(k, 0.0) - v) > 0.004:
+                    sede = next((sa[x] for x in k if isinstance(x, str) and x in sa), "-")
+                    chiave = "%s/%s/%s" % (k[0], k[1] if len(k) > 1 else "", sede)
+                    t = persi.setdefault(chiave, [0, 0.0, 0.0]); t[0] += 1; t[1] += v; t[2] += cb.get(k, 0.0)
+            print("DIAG celle %s: %s" % (tag, " | ".join("%s: %d celle, prima %.2f ora %.2f" % (k, n, x, y) for k, (n, x, y) in sorted(persi.items())) or "nessuna cella persa o cambiata"), flush=True)
+        ora = json.loads(db.execute("SELECT data FROM companies WHERE id=?", (cid,)).fetchone()["data"] or "{}")
+        for v in db.execute("SELECT id, data FROM company_versions WHERE company_id=? AND id IN (55, 57, 61, 70, 71)", (cid,)):
+            confronta(json.loads(_decomprimi(v["data"])), ora, "copia%d→adesso" % v["id"])
+        db.close()
+    except Exception as e:
+        print("DIAG celle errore", e, flush=True)
+
+
+_diag_celle()
+
 # App di bilancio (Controllo di gestione): pagina /bilancio e API /api/bilancio/... nello stesso servizio
 import bilancio_api
 bilancio_api.registra(app, {
