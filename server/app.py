@@ -753,12 +753,7 @@ def salva_versione(db, company_id, data_text, motivo="", forza=False):
                 pass
     db.execute("INSERT INTO company_versions (company_id, saved_at, motivo, data) VALUES (?,?,?,?)",
                (company_id, now_iso(), motivo, _comprimi(data_text or "{}")))
-    limite30 = (datetime.datetime.utcnow() - datetime.timedelta(days=30)).isoformat() + "Z"
-    limite2 = (datetime.datetime.utcnow() - datetime.timedelta(days=2)).isoformat() + "Z"
-    db.execute("DELETE FROM company_versions WHERE company_id=? AND saved_at < ?", (company_id, limite30))
-    db.execute("""DELETE FROM company_versions WHERE company_id=? AND saved_at < ? AND id NOT IN (
-                    SELECT MAX(id) FROM company_versions WHERE company_id=? GROUP BY substr(saved_at, 1, 10))""",
-               (company_id, limite2, company_id))
+    # Le copie vecchie NON si cancellano più (24/11/2026): servono per ritrovare i dati. Si toglieranno solo con l'OK di Giancarlo.
 
 
 @app.route("/api/admin/companies/<cid>/versions", methods=["GET"])
@@ -2023,6 +2018,66 @@ def _trasloco_import():
 _trasloco_import()
 
 init_db()
+
+
+# Controllo in sola lettura (24/11/2026): per ogni copia salvata scrive nel log SOLO totali per sede e numeri di righe
+# (nessun nome, nessun importo di una singola persona), per capire in quale copia ci sono i dati che mancano oggi.
+def _diag_copie():
+    try:
+        db = sqlite3.connect(DB_PATH); db.row_factory = sqlite3.Row
+        comps = [r["company_id"] for r in db.execute("SELECT DISTINCT company_id FROM company_versions WHERE motivo LIKE 'prima delle persone%'")]
+        for cid in comps:
+            def riassunto(d):
+                sites = {s.get("id"): s.get("name") for s in d.get("sites") or []}
+                stip = next((c for c in d.get("fixedCats") or [] if re.search(r"stipend", c.get("name") or "", re.I)), None) or {}
+                items = d.get("fixedItems") or []
+                st_items = [x for x in items if x.get("catId") == stip.get("id")]
+                cf = (d.get("consuntivo") or {}).get("fixed") or {}
+                bf = (d.get("budget") or {}).get("fixed") or {}
+                def somma_c(ids):
+                    out = {}
+                    for i in ids:
+                        for sid, v in (cf.get(i) or {}).items():
+                            out[sites.get(sid, "?")] = round(out.get(sites.get(sid, "?"), 0) + sum(float(x or 0) for x in (v or [])), 2)
+                    return out
+                def somma_b(ids):
+                    out = {}
+                    for i in ids:
+                        for sid, v in (bf.get(i) or {}).items():
+                            out[sites.get(sid, "?")] = round(out.get(sites.get(sid, "?"), 0) + float(v or 0), 2)
+                    return out
+                ids_st = [x.get("id") for x in st_items]
+                per_sede = {}
+                for x in st_items:
+                    k = sites.get(x.get("siteId"), "generale")
+                    per_sede[k] = per_sede.get(k, 0) + 1
+                vc = (d.get("consuntivo") or {}).get("varCat") or {}
+                tot_var = 0.0
+                for c in vc.values():
+                    for e in (c or {}).values():
+                        if isinstance(e, dict):
+                            tot_var += sum(float(x or 0) for x in e.get("total") or [])
+                            for sp in e.get("suppliers") or []:
+                                tot_var += sum(float(x or 0) for x in sp.get("values") or [])
+                return ("voci_fisse=%d stipendi=%d conRef=%d perSite=%s righe_stipendi_per_sede=%s budget_stipendi=%s consuntivo_stipendi=%s "
+                        "budget_fissi_tot=%.2f consuntivo_fissi_tot=%.2f consuntivo_variabili_tot=%.2f dottori=%d anno_archivio=%s") % (
+                    len(items), len(st_items), sum(1 for x in st_items if x.get("ref")), stip.get("perSite"), per_sede,
+                    somma_b(ids_st), somma_c(ids_st), sum(sum(float(v or 0) for v in (bf.get(i) or {}).values()) for i in bf),
+                    sum(sum(sum(float(x or 0) for x in (v or [])) for v in (cf.get(i) or {}).values()) for i in cf),
+                    tot_var, len(d.get("supplierMaster") or []), d.get("_editingArchivedYear"))
+            for v in db.execute("SELECT id, saved_at, motivo, data FROM company_versions WHERE company_id=? ORDER BY id", (cid,)):
+                try:
+                    print("DIAG copia %s %s [%s] %s" % (v["id"], v["saved_at"][:16], v["motivo"], riassunto(json.loads(_decomprimi(v["data"])))), flush=True)
+                except Exception as e:
+                    print("DIAG copia %s errore %s" % (v["id"], e), flush=True)
+            cur = db.execute("SELECT data FROM companies WHERE id=?", (cid,)).fetchone()
+            print("DIAG ADESSO %s" % riassunto(json.loads(cur["data"] or "{}")), flush=True)
+        db.close()
+    except Exception as e:
+        print("DIAG errore", e, flush=True)
+
+
+_diag_copie()
 
 # App di bilancio (Controllo di gestione): pagina /bilancio e API /api/bilancio/... nello stesso servizio
 import bilancio_api
