@@ -2166,6 +2166,30 @@ def _diag_cerca_ovunque():
 
 _diag_cerca_ovunque()
 
+
+def _diag_backup_personale():
+    try:
+        db = sqlite3.connect(DB_PATH); db.row_factory = sqlite3.Row
+        for r in db.execute("SELECT id, name, data FROM companies"):
+            d = json.loads(r["data"] or "{}")
+            sites = {x.get("id"): x.get("name") for x in d.get("sites") or []}
+            for b in d.get("legacyStaffBackup") or []:
+                items = b.get("items") or []
+                cons = b.get("consuntivo") or {}
+                righe = []
+                for it in items:
+                    n = (it.get("name") or "").lower()
+                    if any(c in n for c in ("olla", "atzeni", "largiu")) and "collabor" not in n:
+                        dove = [sites.get(sid, "?") for sid, v in (cons.get(it.get("id")) or {}).items() if any(float(x or 0) for x in (v or []))]
+                        righe.append("%s cons_in=%s" % (n.split()[0] if n else "?", dove))
+                print("DIAG backup_personale %s del %s categoria=%s voci=%d: %s" % (r["name"], b.get("at"), b.get("catName"), len(items), " | ".join(righe) or "-"), flush=True)
+        db.close()
+    except Exception as e:
+        print("DIAG backup errore", e, flush=True)
+
+
+_diag_backup_personale()
+
 # App di bilancio (Controllo di gestione): pagina /bilancio e API /api/bilancio/... nello stesso servizio
 import bilancio_api
 bilancio_api.registra(app, {
