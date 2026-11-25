@@ -1814,6 +1814,69 @@ STATE.nextYearBudget = roundBudgetDraft(draft);
 saveState();
 return monthsElapsed;
 }
+/* ===== Budget dell'anno dopo: persone che durante l'anno hanno cambiato sede (To Smile) =====
+   Durante l'anno non si toglie mai niente. Le persone spuntate escono dalla sede di prima SOLO alla chiusura dell'anno,
+   dopo l'archivio dell'anno (che tiene voci e costi). Di base: spuntato chi ha cambiato sede, non spuntato chi non è più attivo. */
+var cambiSede = null;
+async function caricaCambiSede(){
+var r = await apiGet('/api/company/cambi-sede');
+cambiSede = r.ok && r.data ? r.data : {persone:[], errore:(r.data&&r.data.error)||'Non riesco a leggere i cambi di sede.'};
+return cambiSede;
+}
+function cambioScelto(p){ var sc=STATE.cambiSedeScelte||{}; return Object.prototype.hasOwnProperty.call(sc,p.chiave) ? !!sc[p.chiave] : !!p.spunta; }
+function cambiSedeCard(){
+if(cambiSede===null){ cambiSede={caricamento:true}; caricaCambiSede().then(function(){ if(currentPage==='budget') render(); }); }
+if(!cambiSede.caricamento && !cambiSede.errore && !cambiSede.collegate) return null;
+var card = el('div','card');
+card.appendChild(el('h2',null,'Persone che nel '+STATE.currentYear+' hanno cambiato sede'));
+card.appendChild(el('div','help-tip','Confronto le sedi della persona qui con le sue sedi di oggi in Gestione accessi. Spuntare non toglie niente: chi è spuntato esce dalla sede di prima solo quando chiudi l’anno '+STATE.currentYear+' (Impostazioni), dopo l’archivio dell’anno. Le persone messe a mano non compaiono qui.'));
+if(cambiSede.caricamento){ card.appendChild(el('div',null,'Caricamento…')); return card; }
+if(cambiSede.errore){ card.appendChild(el('div','notebox',ssoEsc(cambiSede.errore))); }
+var L = cambiSede.persone||[];
+if(!L.length && !cambiSede.errore){ card.appendChild(el('div',null,'Nessuna persona ha cambiato sede.')); }
+if(L.length){
+var wrap = el('div'); wrap.style.overflowX='auto'; var t = el('table','datatable');
+t.appendChild(el('thead',null,'<tr><th>Persona</th><th>Voce</th><th>Nel '+STATE.currentYear+'</th><th>Oggi in Gestione accessi</th><th>Nel budget '+(STATE.currentYear+1)+'</th></tr>'));
+var tb = el('tbody');
+L.forEach(function(p){
+var tr = el('tr');
+tr.appendChild(el('td',null,'<b>'+ssoEsc(p.nome)+'</b>'));
+tr.appendChild(el('td',null,ssoEsc(p.voce)));
+tr.appendChild(el('td',null,ssoEsc(p.prima.join(', '))));
+tr.appendChild(el('td',null,p.attivo ? ssoEsc(p.oggi.join(', ')) : '<b style="color:var(--red)">non più attivo</b>'));
+var td = el('td'); var lb = el('label'); lb.style.cssText='display:inline-flex;gap:6px;align-items:center;cursor:pointer;white-space:nowrap';
+var cb = document.createElement('input'); cb.type='checkbox'; cb.checked=cambioScelto(p);
+cb.onchange=function(){ if(!STATE.cambiSedeScelte||typeof STATE.cambiSedeScelte!=='object') STATE.cambiSedeScelte={}; STATE.cambiSedeScelte[p.chiave]=cb.checked; saveState(); };
+lb.appendChild(cb); lb.appendChild(document.createTextNode('Togli da '+p.sede)); td.appendChild(lb); tr.appendChild(td);
+tb.appendChild(tr);
+});
+t.appendChild(tb); wrap.appendChild(t); card.appendChild(wrap);
+}
+var agg = el('button','small-btn','Aggiorna elenco'); agg.style.marginTop='8px';
+agg.onclick=function(){ cambiSede=null; render(); };
+card.appendChild(agg);
+return card;
+}
+/* dopo archiveCurrentYear: toglie le persone scelte dalla sede di prima nel nuovo anno. Restituisce quelle tolte. */
+function togliCambiSede(lista){
+var fatti = [];
+lista.forEach(function(p){
+var k = String(p.chiave).split(':');
+if(k[0]==='it'){
+if(!STATE.fixedItems.some(function(it){return it.id===k[1];})) return;
+removeFixedItem(k[1], true);
+[STATE.nextYearBudget, STATE._budgetLiveBackup].forEach(function(bg){ if(bg && bg.fixed) delete bg.fixed[k[1]]; });
+fatti.push(p);
+} else if(k[0]==='sup'){
+var m = findSupMaster(STATE,k[1]); if(!m || !m.sites || !m.sites[k[2]]) return;
+var cv = STATE.consuntivo.varCat[m.catId]; var e = cv && cv[k[2]];
+if(e && Array.isArray(e.suppliers)) e.suppliers = e.suppliers.filter(function(x){ return x.id!==m.id; });
+m.sites[k[2]] = false;
+fatti.push(p);
+}
+});
+return fatti;
+}
 function enterNextYearBudgetEdit(){
 if(!STATE.nextYearBudget) return false;
 if(STATE._editingArchivedYear!==null || STATE._editingNextYearBudget) return false;
@@ -3025,6 +3088,7 @@ yearTabs.appendChild(curYearBtn);
 var nextYearBtn = el('button','total-tab'+(STATE._editingNextYearBudget?' active':''), 'Anno '+(STATE.currentYear+1)+' (bozza)');
 nextYearBtn.onclick = function(){
 if(!STATE._editingNextYearBudget){
+cambiSede = null;
 if(!STATE.nextYearBudget){ creaBudgetAnnoSuccessivo(); }
 enterNextYearBudgetEdit();
 }
@@ -3059,6 +3123,7 @@ render();
 };
 draftInfoCard.appendChild(delDraftBtn);
 main.appendChild(draftInfoCard);
+var csCard = cambiSedeCard(); if(csCard) main.appendChild(csCard);
 }
 var siteCard = el('div','card');
 siteCard.appendChild(el('h2',null,'Sedi / centri'));
@@ -4700,17 +4765,27 @@ yearCard.appendChild(el('div','notebox','Stai gi\u00e0 correggendo l\u2019anno '
 yearCard.appendChild(el('div','notebox','Stai modificando la bozza di budget dell\u2019anno successivo: salva e torna all\u2019anno corrente (bottone in alto) prima di chiudere l\u2019anno.'));
 } else {
 var closeYearBtn = el('button','btn danger','Chiudi anno '+STATE.currentYear+' e inizia il '+(STATE.currentYear+1));
-closeYearBtn.onclick = function(){
+closeYearBtn.onclick = async function(){
+closeYearBtn.disabled = true;
+var cs = await caricaCambiSede();
+closeYearBtn.disabled = false;
+var lista = (cs.persone||[]).filter(cambioScelto);
 var msg = 'Chiudere l\u2019anno '+STATE.currentYear+'? Il Consuntivo mensile verr\u00e0 archiviato e poi azzerato per il nuovo anno. '
 + (STATE.nextYearBudget ? 'La bozza di budget che hai preparato per l\u2019anno successivo diventer\u00e0 il nuovo budget attivo.' : 'La struttura di Budget (sedi, voci di costo) resta invariata.')
-+ ' Potrai sempre riaprire '+STATE.currentYear+' in un secondo momento per correggerlo.';
-showConfirmModal(msg, function(){
++ ' Potrai sempre riaprire '+STATE.currentYear+' in un secondo momento per correggerlo.'
++ (lista.length ? '<br><br><b>Nel budget '+(STATE.currentYear+1)+' tolgo:</b><br>' + lista.map(function(p){ return '\u00b7 '+ssoEsc(p.nome)+' da '+ssoEsc(p.sede)+' ('+ssoEsc(p.voce)+')'; }).join('<br>') + '<br>Nel '+STATE.currentYear+' archiviato restano con voci e costi.' : '')
++ (cs.errore ? '<br><br><b>Attenzione:</b> '+ssoEsc(cs.errore)+' Se chiudi ora non tolgo nessuna persona da nessuna sede.' : '');
+showConfirmModal(msg, async function(){
 var year = STATE.currentYear;
 var hadDraft = !!STATE.nextYearBudget;
-archiveCurrentYear(year);
+await apiSend('/api/company/cambi-sede/versione', 'POST', {});
+if(!archiveCurrentYear(year)) { flashStatus('Chiusura non riuscita: riprova'); return; }
+var tolti = togliCambiSede(lista);
+STATE.cambiSedeScelte = {};
 STATE.currentYear = year+1;
 saveState();
-flashStatus('Anno '+year+' chiuso e archiviato'+(hadDraft ? ' \u2014 bozza budget applicata' : ''));
+if(tolti.length) apiSend('/api/company/cambi-sede/avviso', 'POST', {righe: tolti.map(function(p){ return p.nome+': tolto da '+p.sede+' ('+p.voce+') nel budget '+(year+1)+'. Nel '+year+' archiviato resta con i suoi costi.'; })});
+flashStatus('Anno '+year+' chiuso e archiviato'+(hadDraft ? ' \u2014 bozza budget applicata' : '')+(tolti.length ? ' \u2014 '+tolti.length+' person'+(tolti.length===1?'a tolta':'e tolte')+' dalla sede di prima' : ''));
 render();
 });
 };

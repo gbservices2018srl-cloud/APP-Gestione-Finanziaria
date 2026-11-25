@@ -1535,6 +1535,98 @@ def appgestione_persone():
     return jsonify({"ok": True, "prova": prova, "scritto": bool(cambiato and not prova), "esiti": esiti})
 
 
+# ---------- Budget dell'anno dopo: persone che durante l'anno hanno cambiato sede ----------
+# Durante l'anno non si toglie mai niente. Qui si confrontano le sedi della persona in Gestione finanziaria con le sue
+# sedi di oggi in Gestione accessi: chi non c'è più in una sede si può togliere da quella sede SOLO alla chiusura dell'anno
+# (lo fa la pagina, dopo aver archiviato l'anno). Questa chiamata non scrive niente.
+@app.route("/api/company/cambi-sede", methods=["GET"])
+def company_cambi_sede():
+    if not require_company():
+        return json_error("Non autorizzato.", 401)
+    ok, err = check_company_access()
+    if not ok:
+        return err
+    row = get_db().execute("SELECT data FROM companies WHERE id=?", (session["company_id"],)).fetchone()
+    if row is None:
+        return json_error("Azienda non trovata.", 404)
+    d = json.loads(row["data"] or "{}")
+    sites = d.get("sites") or []
+    nomi = {s.get("id"): s.get("name") for s in sites}
+    cat_dott = {c.get("id") for c in d.get("varCats") or [] if c.get("suppliers")}
+    # (ref, chiave, nome, voce, sedeId)
+    righe = []
+    for m in d.get("supplierMaster") or []:
+        if m.get("ref") and m.get("catId") in cat_dott:
+            for sid, on in (m.get("sites") or {}).items():
+                if on and sid in nomi:
+                    righe.append((m["ref"], "sup:%s:%s" % (m["id"], sid), m.get("name") or "", "Costi per dottori", sid))
+    voce_cat = {c.get("id"): c.get("name") or "" for c in d.get("fixedCats") or []}
+    for it in d.get("fixedItems") or []:
+        if it.get("ref") and it.get("siteId") in nomi:
+            righe.append((it["ref"], "it:%s" % it["id"], it.get("name") or "", voce_cat.get(it.get("catId"), ""), it["siteId"]))
+    if not righe:
+        return jsonify({"persone": [], "collegate": False})
+    if not sso_enabled():
+        return json_error("Collegamento con Gestione accessi non configurato.", 503)
+    st, r = sso_call("/api/_suite/finanza-persone-sedi", {})
+    if st != 200:
+        return json_error("Non riesco a leggere le sedi di oggi da Gestione accessi: riprova tra poco.", 502)
+    oggi = {p.get("ref"): p for p in r.get("persone") or []}
+    prima = {}
+    for ref, _, _, _, sid in righe:
+        prima.setdefault(ref, set()).add(sid)
+    out = []
+    for ref, chiave, nome, voce, sid in righe:
+        p = oggi.get(ref)
+        attivo = bool(p and p.get("attivo"))
+        sedi_oggi = set()
+        for sn in (p or {}).get("sedi") or []:
+            s = _trova_sede_fin(sites, sn)
+            if s:
+                sedi_oggi.add(s["id"])
+        if attivo and sid in sedi_oggi:
+            continue
+        if attivo and not (p or {}).get("sedi"):
+            continue   # senza sedi in Gestione accessi: non si capisce, non si propone niente
+        out.append({"chiave": chiave, "nome": nome, "voce": voce, "sede": nomi.get(sid, ""), "attivo": attivo,
+                    "prima": sorted(nomi.get(x, "") for x in prima[ref]),
+                    "oggi": sorted(nomi.get(x, "") for x in sedi_oggi),
+                    # di base: spuntato se ha cambiato sede, non spuntato se non è più attivo
+                    "spunta": attivo})
+    out.sort(key=lambda x: (x["nome"].lower(), x["sede"]))
+    return jsonify({"persone": out, "collegate": True})
+
+
+# chiusura dell'anno: copia di sicurezza prima, poi gli avvisi al proprietario per ogni persona tolta
+@app.route("/api/company/cambi-sede/versione", methods=["POST"])
+def company_cambi_sede_versione():
+    if not require_company():
+        return json_error("Non autorizzato.", 401)
+    ok, err = check_company_access()
+    if not ok:
+        return err
+    db = get_db()
+    row = db.execute("SELECT data FROM companies WHERE id=?", (session["company_id"],)).fetchone()
+    if row is None:
+        return json_error("Azienda non trovata.", 404)
+    salva_versione(db, session["company_id"], row["data"], "prima della chiusura dell'anno", forza=True)
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/company/cambi-sede/avviso", methods=["POST"])
+def company_cambi_sede_avviso():
+    if not require_company():
+        return json_error("Non autorizzato.", 401)
+    ok, err = check_company_access()
+    if not ok:
+        return err
+    righe = (request.get_json(force=True, silent=True) or {}).get("righe") or []
+    if isinstance(righe, list) and righe and sso_enabled():
+        sso_call("/api/_suite/finanza-avviso", {"righe": [str(x)[:300] for x in righe[:200]]})
+    return jsonify({"ok": True})
+
+
 # ---------- Compenso medici (app To Smile): il compenso pagato va nel Consuntivo ----------
 # Riga del medico nei «Costi per dottori», nella sede del compenso, nel mese del pagamento: si SOMMA a quello che c'è.
 # Ogni pagamento ha un riferimento: se arriva due volte non si somma di nuovo.
