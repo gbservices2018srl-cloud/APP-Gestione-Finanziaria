@@ -1126,6 +1126,26 @@ def appgestione_aziende():
     return jsonify({"aziende": [{"id": r["id"], "nome": r["name"]} for r in rows]})
 
 
+# Compenso medici (app To Smile): il Listino & margini, solo le colonne che servono al compenso.
+# percProf = % del medico su (tariffa - laboratorio); costoProf = compenso fisso in euro; lab = costo di laboratorio.
+@app.route("/api/_appgestione/listino", methods=["GET"])
+def appgestione_listino():
+    if not _chiave_app_ok():
+        return json_error("Non autorizzato.", 401)
+    row = get_db().execute("SELECT data FROM companies WHERE id=?", (request.args.get("azienda", ""),)).fetchone()
+    if row is None:
+        return json_error("Azienda non trovata.", 404)
+    d = json.loads(row["data"] or "{}")
+    out = []
+    for r in d.get("listino") or []:
+        lab = r.get("label")
+        if not isinstance(lab, str) or not lab.strip():
+            continue
+        num = lambda v: float(v) if isinstance(v, (int, float)) else 0.0
+        out.append({"label": lab.strip(), "lab": num(r.get("lab")), "percProf": num(r.get("percProf")), "costoProf": num(r.get("costoProf"))})
+    return jsonify({"listino": out})
+
+
 @app.route("/api/_appgestione/consuntivo", methods=["GET"])
 def appgestione_consuntivo():
     if not _chiave_app_ok():
