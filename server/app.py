@@ -1319,9 +1319,16 @@ def _trova_voce(d, nome):
     n = _norm_voce(nome)
     fx = [it for it in d.get("fixedItems") or [] if _norm_voce(it.get("name")) == n]
     vc = [c for c in d.get("varCats") or [] if _norm_voce(c.get("name")) == n]
-    if len(fx) + len(vc) != 1:
+    if len(fx) + len(vc) == 1:
+        return ("fisso", fx[0]) if fx else ("variabile", vc[0])
+    if fx or vc:
         return None, None
-    return ("fisso", fx[0]) if fx else ("variabile", vc[0])
+    # non è una voce: può essere un fornitore dentro un costo variabile con fornitori (es. «Farmacia» in Materiale di consumo)
+    cat_forn = {c.get("id"): c for c in d.get("varCats") or [] if c.get("suppliers")}
+    fo = [m for m in d.get("supplierMaster") or [] if m.get("catId") in cat_forn and _norm_voce(m.get("name")) == n]
+    if len(fo) == 1:
+        return "fornitore", dict(fo[0], name="%s · %s" % (cat_forn[fo[0]["catId"]].get("name"), fo[0].get("name")), _m=fo[0])
+    return None, None
 
 
 @app.route("/api/_appgestione/voci", methods=["GET"])
@@ -1376,11 +1383,28 @@ def appgestione_costi_cassa():
             return json_error("Dati non validi.", 400)
         tipo, v = _trova_voce(d, m.get("voce"))
         if not v:
-            return json_error("La voce «%s» non c'è nella Gestione finanziaria (o ce n'è più di una con lo stesso nome)." % m.get("voce"), 404)
+            return json_error("«%s» non c'è nella Gestione finanziaria né come voce né come fornitore (o ce n'è più di uno con lo stesso nome)." % m.get("voce"), 404)
         piano.append((tipo, v, sid, mese, delta))
     cons = d.setdefault("consuntivo", {})
     for tipo, v, sid, mese, delta in piano:
-        if tipo == "fisso":
+        if tipo == "fornitore":
+            # la riga del fornitore nella sede (se nella sede non c'era, si aggiunge e il fornitore si spunta per la sede)
+            m = v["_m"]
+            e = cons.setdefault("varCat", {}).setdefault(m["catId"], {}).get(sid) or {"total": [0] * 12, "suppliers": []}
+            if not isinstance(e.get("suppliers"), list):
+                e["suppliers"] = []
+            riga = next((x for x in e["suppliers"] if x.get("id") == m["id"]), None)
+            if riga is None:
+                riga = {"id": m["id"], "name": m.get("name") or "", "values": [0] * 12}
+                e["suppliers"].append(riga)
+                m.setdefault("sites", {})[sid] = True
+            vals = list(riga.get("values") or [])
+            while len(vals) < 12:
+                vals.append(0)
+            vals[mese - 1] = round(_num(vals[mese - 1]) + delta, 2)
+            riga["values"] = vals
+            cons["varCat"][m["catId"]][sid] = e
+        elif tipo == "fisso":
             arr = cons.setdefault("fixed", {}).setdefault(v["id"], {}).get(sid)
             arr = list(arr or [])
             while len(arr) < 12:
