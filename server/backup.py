@@ -85,6 +85,26 @@ def registra(app, data_dir, db_path):
         os.replace(dest + ".part", dest)
         return os.path.getsize(dest)
 
+    # i dati dell'app: si tiene la copia solo se è arrivata intera (in fondo c'è sempre LEGGIMI-backup.json);
+    # una copia interrotta a metà (es. il server che riparte) non deve sembrare riuscita
+    def scarica_dati(url, headers, dest):
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=900) as r, open(dest + ".part", "wb") as f:
+            shutil.copyfileobj(r, f, 1024 * 1024)
+        intera = False
+        try:
+            with tarfile.open(dest + ".part", "r:gz") as t:
+                for m in t:
+                    if m.name == "LEGGIMI-backup.json":
+                        intera = True
+        except Exception:
+            intera = False
+        if not intera:
+            os.remove(dest + ".part")   # solo il file scaricato a metà: le copie delle notti prima restano
+            raise RuntimeError("copia arrivata a metà (il servizio principale si è interrotto): riprova")
+        os.replace(dest + ".part", dest)
+        return os.path.getsize(dest)
+
     def chiedi_json(url, headers, metodo="GET", corpo=None):
         dati = json.dumps(corpo).encode() if corpo is not None else None
         h = dict(headers)
@@ -179,7 +199,7 @@ def registra(app, data_dir, db_path):
                 st = {"ultimo": datetime.datetime.now(datetime.timezone.utc).isoformat(), "ok": True, "errori": [], "parti": {}}
                 try:
                     dest = os.path.join(cartella(slug), f"dati-{giorno}.tar.gz")
-                    st["parti"]["dati"] = {"byte": scarica_in(f"{principale}/api/_backup/esporta?cliente={slug}", {"Authorization": "Bearer " + k}, dest)}
+                    st["parti"]["dati"] = {"byte": scarica_dati(f"{principale}/api/_backup/esporta?cliente={slug}", {"Authorization": "Bearer " + k}, dest)}
                     pulisci(slug, "dati")
                 except Exception as e:
                     st["errori"].append("dati: " + str(e))
@@ -206,7 +226,7 @@ def registra(app, data_dir, db_path):
                             st["errori"].append(nome + ": " + str(e))
                 st["ok"] = not st["errori"]
                 scrivi_stato(slug, st)
-                print(f"Backup {slug}: {'OK' if st['ok'] else 'con errori'} {json.dumps(st['parti'])[:300]}", flush=True)
+                print(f"Backup {slug}: {'OK' if st['ok'] else 'con errori'} {json.dumps(st['parti'])[:300]}{(' · ' + '; '.join(st['errori'])[:300]) if st['errori'] else ''}", flush=True)
         finally:
             blocco.release()
 
